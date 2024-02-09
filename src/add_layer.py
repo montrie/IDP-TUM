@@ -26,11 +26,11 @@ trafficRanges = [[(0.0, 1.0), 'No Data', QtGui.QColor('#afafaf'), 0.26],
                  [(300.1, 400.0), 'Busy Traffic', QtGui.QColor('#ffa634'), 0.66],
                  [(400.1, 1000.0), 'Very Busy Traffic', QtGui.QColor('#ff2712'), 0.66]]
 
-prefixPath = r'C:\Program Files\QGIS 3.34.0\bin'  # TODO: change prefix path to your QGIS root directory
+prefixPath = r'/usr'  # TODO: change prefix path to your QGIS root directory
 QgsApplication.setPrefixPath(prefixPath, True)
-qgs = QgsApplication([], True)
-project = QgsProject.instance()
-qgs.initQgis()
+qgs = QgsApplication([], False)  # second argument disables the GUI
+qgs.initQgis()  # load providers
+project = QgsProject.instance()  # save a reference to the current instance of QgsProject
 
 # Adding Map
 tms = '    crs=EPSG:3857&format&type=xyz&url=https://tile.openstreetmap.org/%7Bz%7D/%7Bx%7D/%7By%7D.png&zmax=19&zmin=0'

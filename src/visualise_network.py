@@ -12,12 +12,13 @@ import geopandas as gpd
 
 from networkx import MultiDiGraph
 from geopandas import GeoDataFrame
-from shapely.geometry import Point
+from shapely.geometry import Point, LineString
 from osmnx import settings, utils_graph, io
 from shutil import copy
 # from subprocess import Popen, PIPE
 from config import ROOT_DIR
 from copy import deepcopy
+from match import match  # TODO: match seems to be a 'soft' keyword since python3.10 -> maybe an issue?
 
 # Use this citation when referencing OSMnx in work
 # Boeing, G. 2017. OSMnx: New Methods for Acquiring, Constructing, Analyzing, and Visualizing Complex Street Networks.
@@ -109,12 +110,13 @@ def get_detectors() -> (GeoDataFrame, [Point]):
     detector_gdf = GeoDataFrame(detector_df, crs=crs, geometry=geometry)
 
     # Add the point geometry as column to points.csv for fmm in cygwin
-    #detector_df.insert(11, "geom", geometry, True)
+    # detector_df.insert(11, "geom", geometry, True)
     # TODO: replace path to local cygwin64 installation or comment it out -> contains example result of fmm
-    #  in data/network/matched.csv
-    detector_gdf.to_csv("D:\\cygwin64\\home\\User\\fmm\\matching\\network\\points.csv", sep=";")
+    # in data/network/matched.csv
+    # detector_gdf.to_csv("D:\\cygwin64\\home\\User\\fmm\\matching\\network\\points.csv", sep=";")
+    detector_gdf.to_csv(networkDataRoot + "points.csv", sep=";")
 
-    return detector_gdf, geometry
+    return detector_gdf, geometry, latest_merged_data_csv
 
 
 def to_shp(map: MultiDiGraph, nodes: [(str, str)]):
@@ -131,6 +133,83 @@ def to_shp(map: MultiDiGraph, nodes: [(str, str)]):
     # Write the GeoDataFrame to a shapefile
     gdf_nodes.to_file(output_shapefile)
 
+def find_clostest_nodes(G: MultiDiGraph, node, nodes, n: int):
+    """
+
+    :param G: A MultiDiGraph containing a OSMnx street network
+    :param node:
+    :param nodes: Detector nodes in G
+    :param n: Number of closest nodes to be found in relation to node
+    :return:
+    """
+    detector_paths = {}
+    distances = {}
+
+    for i, node_start in enumerate(nodes):
+        for node_end in nodes[i+1:]:
+            try:
+                shortest_path = nx.shortest_path(G, node_start, node_end, weight='length')
+                distances[node_end] = shortest_path
+            except nx.NetworkXNoPath:
+                pass
+        smallest = nsmallest(n, distances, key=distances.get)
+        detector_paths[node_start] = smallest
+
+    result = detector_paths
+
+
+    # distances = {}
+    # for target in nodes:
+    #     if node != target:
+    #         try:
+    #             distance = nx.shortest_path_length(G, node, target, weight='length')
+    #             distances[target] = distance
+    #         except nx.NetworkXNoPath:   # TODO: probably not necessary since we don't have unconnected nodes
+    #             pass  # ignore non-existent paths
+    # result = nsmallest(n, distances, key=distances.get)
+
+    return result
+
+
+def connect_detector_nodes(G: MultiDiGraph, detector_nodes: [(any, any)]):
+    """
+
+    :param G:
+    :param detector_nodes:
+    """
+    # TODO: (un)install scikit-learn
+    ox.project_graph(G)
+    edges = []
+
+    # nodes is a list of coordinates (lat, lon)? of every detector node
+    for coord in detector_nodes:
+        # convert coord into a Point
+        point = Point(coord[1], coord[0])
+        # get nearest edge to current node and split into u, v, key info
+        u, v, key = nearest_edges(G, X=point.x, Y=point.y)  # TODO: update to newest version
+        # get start and end node of the edge
+        start_node = G.nodes[u]
+        end_node = G.nodes[v]
+
+        # calculate geometry of new edges
+        start_point = Point(start_node['x'], start_node['y'])
+        end_point = Point(end_node['x'], end_node['y'])
+        new_edge_geom_1 = LineString([start_point, point])
+        new_edge_geom_2 = LineString([point, end_point])
+
+        # get detector node from graph
+        detector_node = nearest_nodes(G, X=point.x, Y=point.y, return_dist=False)
+
+        # add new edges to graph
+        # TODO: maybe add flow information here?
+
+        G.add_edge(u, detector_node, key=key, geom=new_edge_geom_1)
+        G.add_edge(detector_node, v, key=key, geom=new_edge_geom_2)
+        # G.add_edges_from()
+
+        # remove original edge because is now split into 2 edges
+        G.remove_edge(u, v, key)
+
 
 def plot():
     """
@@ -143,7 +222,8 @@ def plot():
     # get a base map and the merged detector locations
     map = get_base_graphml()
     nodes_map = deepcopy(map)
-    df_detectors, coords = get_detectors()
+    df_detectors, coords, merged_data_csv = get_detectors()
+    print(merged_data_csv)
 
     # https://stackoverflow.com/questions/64104884/osmnx-project-point-to-street-segments
     print("TODO: Automate the matching using fmm and copy the result into data/network")
@@ -151,8 +231,9 @@ def plot():
 
     # get mapped points
     # TODO: for the server, we can just move matched.csv to the correct location instead of reading and writing the file
-    copy("D:\\cygwin64\\home\\User\\fmm\\matching\\network\\matched.csv",
-         networkDataRoot+"matched.csv")
+    # copy("D:\\cygwin64\\home\\User\\fmm\\matching\\network\\matched.csv",
+    #      networkDataRoot+"matched.csv")
+    match("points.csv")
     df_matched = pd.read_csv(networkDataRoot + "matched.csv", sep=";")
 
     # fmm seems to sometimes write out wrong information:
@@ -206,12 +287,13 @@ def plot():
 
     # add matched detector locations to base map and graph the result
     # ox.io.save_graph_shapefile(map, networkDataRoot+"map_and_points")
-    ox.io.save_graph_geopackage(map, networkDataRoot+"map_and_points.gpkg")
+    # ox.io.save_graph_geopackage(map, networkDataRoot+"map_and_points.gpkg")
     ox.io.save_graph_geopackage(nodes_map, networkDataRoot+"detector_nodes.gpkg")
 
     # TODO: color edges between detector nodes
-    for u, v, k in map.edges(keys=True):
-        pass
+
+    # for u, v, k in map.edges(keys=True):
+    #     pass
 
     # map.add_nodes_from(nodes)
     # _ = ox.plot_graph(map, bgcolor="white",
