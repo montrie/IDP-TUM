@@ -1,4 +1,4 @@
-import aiohttp
+#import aiohttp
 import asyncio
 import csv
 import pandas as pd
