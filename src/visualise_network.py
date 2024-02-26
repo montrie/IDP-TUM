@@ -12,12 +12,13 @@ import numpy as np
 from networkx import MultiDiGraph
 from geopandas import GeoDataFrame
 from shapely.geometry import Point, LineString
+from shapely.ops import split
 from osmnx import settings, utils_graph, io
 from shutil import copy
 from config import ROOT_DIR
 from copy import deepcopy
-from heapq import nsmallest
-from osmnx.distance import nearest_edges, nearest_nodes
+from osmnx.distance import nearest_edges
+from taxicab.distance import shortest_path
 
 # Use this citation when referencing OSMnx in work
 # Boeing, G. 2017. OSMnx: New Methods for Acquiring, Constructing, Analyzing, and Visualizing Complex Street Networks.
@@ -29,28 +30,8 @@ xmlDataRoot = ROOT_DIR + "/data/xml_data/"
 networkDataRoot = ROOT_DIR + "/data/network/"
 
 node_size = 3  # used to define the size of map matched detector nodes; 2 is default size
-ox.config(use_cache=True)
-
-
-def find_cygwin() -> str:
-    """ Iterate over all drives (in reverse) to find the cygwin root folder
-
-    :return: path to cygwin64
-    """
-    cygname = "cygwin64"
-    driveStr = subprocess.check_output("fsutil fsinfo drives")
-    driveStr = driveStr.strip().lstrip(b'Drives: ')
-    drives = driveStr.split()
-    # print(drives)
-    # iterate in reverse, my cygwin is in D:
-    for drive in drives[::-1]:
-        drive = drive.decode(encoding='UTF-8')
-        for root, dirs, files in os.walk(drive, topdown=True):
-            for dir in dirs:
-                if dir == cygname:
-                    cygname = os.path.abspath(os.path.join(root, dir))
-                    # print(cygname)
-                    return cygname
+ox.settings.use_cache = False
+ox.settings.log_console = False
 
 
 def save_graph_shapefile_directional(graph: MultiDiGraph, filepath=None, encoding="utf-8"):
@@ -129,15 +110,20 @@ def connect_detector_nodes(G: MultiDiGraph, detector_nodes: [(float, float)], de
     :param detector_nodes: a list of (lat, lon) = (y, x) values of detector nodes
     :param detector_ids: a list containing the  osmid of the detector node corresponding to the entry in detector_nodes
     """
+    # TODO: (un)install scikit-learn
     y, x = zip(*detector_nodes)
     x = np.array(x, dtype=float)
     y = np.array(y, dtype=float)
+    start = time.time_ns()
     edges = nearest_edges(G, list(x), list(y), return_dist=False)
+    end = time.time_ns()
+    print("{}s to execute nearest_edges()".format((end - start) / 1e9))
 
     len_edges = len(edges)
     count = 0
     delete = []
 
+    start = time.time_ns()
     for idx, e in enumerate(edges):
         if count > 1:
             # skip this edge because it has been processed
@@ -204,153 +190,29 @@ def connect_detector_nodes(G: MultiDiGraph, detector_nodes: [(float, float)], de
         # split2 now contains geometry for last detector node connected to end of the original edge
         new_geoms.append(line)  # new_geoms[i] now contains an edge with detector i and i+1 as start and end point
 
-        # create train of edges by calculating the length of the new split up part
+        # create train of edges
+        # TODO: sometimes edge_attrs looks like {0: ..., 1: ..., 2: ...} -> what does this mean? do we just need the first one?
         for i in range(count):
             # https://stackoverflow.com/questions/72523683/#:~:text=Then%20you%20could%20e.g.%20define%20the%20new%20edge%20like%20this
             if i == 0:
                 dist = shortest_path(G, (start_node['y'], start_node['x']), (float(sorted_dets[i][1]), float(sorted_dets[i][0])), e, e)[0]
-                G.add_edge(u, sorted_dets[i][2], **{**edge_attrs[0], 'geometry': new_geoms[i], 'length': round(dist, 3), 'flow': sorted_dets[i][3]})
+                G.add_edge(u_for_edge=u, v_for_edge=sorted_dets[i][2], **{**edge_attrs[0], 'geometry': new_geoms[i], 'length': round(dist, 3)})
             else:
                 dist = shortest_path(G, (float(sorted_dets[i-1][1]), float(sorted_dets[i-1][0])), (float(sorted_dets[i][1]), float(sorted_dets[i][0])), e, e)[0]
-                G.add_edge(sorted_dets[i-1][2], sorted_dets[i][2], **{**edge_attrs[0], 'geometry': new_geoms[i], 'length': round(dist, 3), 'flow': sorted_dets[i][3]})
+                G.add_edge(u_for_edge=sorted_dets[i-1][2], v_for_edge=sorted_dets[i][2], **{**edge_attrs[0], 'geometry': new_geoms[i], 'length': round(dist, 3), 'flow': sorted_dets[i-1][3]})
             if i == count - 1:
                 dist = shortest_path(G, (float(sorted_dets[i][1]), float(sorted_dets[i][0])), (end_node['y'], end_node['x']), e, e)[0]
-                G.add_edge(sorted_dets[i][2], v, **{**edge_attrs[0], 'geometry': new_geoms[i+1], 'length': round(dist, 3), 'flow': sorted_dets[i][3]})
+                G.add_edge(u_for_edge=sorted_dets[i][2], v_for_edge=v, **{**edge_attrs[0], 'geometry': new_geoms[i+1], 'length': round(dist, 3), 'flow': sorted_dets[i][3]})  # TODO: love the IDIOT SANDWICH <3
 
-    # remove the original edges that we split up
     G.remove_edges_from(delete)
-
-
-def find_clostest_nodes(G: MultiDiGraph, node, nodes, n: int):
-    """
-
-    :param G: A MultiDiGraph containing a OSMnx street network
-    :param node:
-    :param nodes: Detector nodes in G
-    :param n: Number of closest nodes to be found in relation to node
-    :return:
-    """
-    detector_paths = {}
-    distances = {}
-
-    for i, node_start in enumerate(nodes):
-        for node_end in nodes[i+1:]:
-            try:
-                shortest_path = nx.shortest_path(G, node_start, node_end, weight='length')
-                distances[node_end] = shortest_path
-            except nx.NetworkXNoPath:
-                pass
-        smallest = nsmallest(n, distances, key=distances.get)
-        detector_paths[node_start] = smallest
-
-    result = detector_paths
-
-
-    # distances = {}
-    # for target in nodes:
-    #     if node != target:
-    #         try:
-    #             distance = nx.shortest_path_length(G, node, target, weight='length')
-    #             distances[target] = distance
-    #         except nx.NetworkXNoPath:   # TODO: probably not necessary since we don't have unconnected nodes
-    #             pass  # ignore non-existent paths
-    # result = nsmallest(n, distances, key=distances.get)
-
-    return result
-
-
-def connect_detector_nodes(G: MultiDiGraph, detector_nodes: [(float, float)], detector_ids: [int]):
-    """
-
-    :param G: A MultiDiGraph containing nodes and edges for a road network
-    :param detector_nodes: a list of (lat, lon) = (y, x) values of detector nodes
-    :param detector_ids: a list containing the  osmid of the detector node corresponding to the entry in detector_nodes
-    """
-    # TODO: (un)install scikit-learn
-    ox.project_graph(G, G.graph['crs'])
-    y, x = zip(*detector_nodes)
-    x = np.array(x, dtype=float) #list(y_x[1])
-    y = np.array(y, dtype=float) #list(y_x[0])
-    start = time.time_ns()
-    edges = nearest_edges(G, list(x), list(y), return_dist=False)
-    end = time.time_ns()
-    print("{}s to execute nearest_edges()".format((end - start) / 1e9))
-    len_edges = len(edges)
-    skip = False
     count = 0
-
-    # now we have a list of edges sorted by the order of detector_nodes and detector_ids
-    start = time.time_ns()
-
-    for idx, e in enumerate(edges):
-        if count > 1:
-            # skip this edge because it has been processed
-            count -= 1
-            continue
-        # save info about current edge, necessary for end of loop
-        cur_edge = e
-
-        # count now has the contains the number of det nodes that are on top of cur_edge = (u, v, key)
-        # now we want to following line of edges: u-d1-d2-v to replace u-v
-        # idea: create list of tuples containing the corresponding det_nodes and their osmids
-        # sort the list, add chain of edges, remove edge u-v, skip for loop until e != cur_edge
-        sorted_dets = []
-        if idx < len_edges:
-            count = 1
-            # check if the next detector nodes are on top of cur_edge
-            while idx + count < len_edges and cur_edge == edges[idx+count]:
-                # count number of edges that are the same == number of detector on the same edge
-                count += 1
-            # sort detector nodes according to their lon, lat values in ascending order
-            sorted_dets = sorted([(lon, lat, osmid)
-                                  for osmid, (lat, lon)
-                                  in zip(detector_ids[idx:idx+count], detector_nodes[idx:idx+count])]) #,
-                                 # key=lambda t: t[1:])  # this should sort (osmid, lon, lat) only using lon lat
-
-        # sorted_dets now has from [d1, d2, d3] -> create edges u-d1-d2-v
-        # get i-th detector coordinate in (lat, lon) form and convert to (lon, lat)
-        lon_lat = detector_nodes[idx][::-1]
-        det_point = Point(lon_lat)
-        u, v, key = e
-
-        print("Before adding edges: edge between {} and {} exists: {}".format(u, v, e in G.edges))
-
-        start_node = G.nodes[u]
-        end_node = G.nodes[v]
-
-        # calculate geometry of new edges
-        start_point = Point(start_node['x'], start_node['y'])
-        end_point = Point(end_node['x'], end_node['y'])
-
-        # create train of edges
-        # sorted_dets[i] = (lon, lat, osmid)
-        # TODO: we can add flow information here, for starters add flow of start node if it is a detector node
-        # connect detectors to
-        for i in range(count):
-            if i == 0:
-                G.add_edge(u, sorted_dets[i][0])
-            elif i == count - 1:
-                G.add_edge(sorted_dets[i - 1][0], sorted_dets[i][0])
-                G.add_edge(sorted_dets[i][0], v)
-            else:
-                G.add_edge(sorted_dets[i-1][0], sorted_dets[i][0])
-
-
-        # get osmid of the i-th detector node
-        # detector_node = detector_ids[idx]
-
-        # add new edges with detector_node as start and end point
-        # G.add_edge(u, detector_node, key=key, geom=new_edge_geom_1)
-        # G.add_edge(detector_node, v, key=key, geom=new_edge_geom_2)
-        # print("After adding edges: edge between {} and {} exists: {}".format(u, v, e in G.edges))
-
-        # remove original edge because is now split into 2 edges
-        if e in G.edges:
-            G.remove_edge(u, v, key)
+    for u, v, key in delete:
+        if G.has_edge(u, v, key):
+            count += 1
+    print("THERE ARE STILL {} ORIGINAL EDGES LEFT ".format(count))
 
     end = time.time_ns()
     print("{}s to execute loop".format((end-start) / 1e9))
-
 
 
 def plot():
@@ -428,41 +290,15 @@ def plot():
     # write updated dataframe to matched.csv
     df_matched.to_csv(networkDataRoot + "coords_matched.csv", sep=";", index=True)
 
-    # add matched detector locations to base map and graph the result
-    # ox.io.save_graph_shapefile(map, networkDataRoot+"map_and_points")
-    # ox.io.save_graph_geopackage(map, networkDataRoot+"map_and_points.gpkg")
-    ox.io.save_graph_geopackage(nodes_map, networkDataRoot+"detector_nodes.gpkg")
-
-    # TODO: color edges between detector nodes
-    num_clostest_nodes = 4
+    # connect matched detector locations to base map and graph the result
     print("start timer")
     start = time.time_ns()
-    connect_detector_nodes(nodes_map, nodes_list, detector_ids)  #TODO: FIRST RUN TOOK 974 SECONDS FOR 704 NODES
+    connect_detector_nodes(nodes_map, nodes_list, detector_ids)
     end = time.time_ns()
-    print("{}s to execute connect_detector_nodes with ~700 nodes".format((end-start)/1e9))
-    nodes = [node for node, data in nodes_map.nodes(data=True) if 'flow' in data and data['flow'] != "NULL"]
-    paths = find_clostest_nodes(nodes_map, None, nodes, num_clostest_nodes)
+    print("{}s to execute connect_detector_nodes with {} nodes".format((end-start)/1e9, len(nodes_list)))
 
-    # for node in nodes:
-    #     closest_nodes = find_clostest_nodes(nodes_map, node, nodes, num_clostest_nodes)
-    #     paths[node] = [nx.shortest_path(nodes_map, node, target, weight='length') for target in closest_nodes]
-
-    for start_node, paths_list in paths.items():
-        for path in paths_list:
-            # TODO: CHECK WHAT IS IN PATHS_LIST
-            nodes_map.add_edge()
-            _, _ = ox.plot_graph_route(nodes_map, path, route_color='yellow', route_linewidth=2, show=False, close=False)
-
-    ox.plot_graph(map, bgcolor="white",
-                  node_size=3, node_color="red",
-                  edge_linewidth=0.3, edge_color="black")
-    # for u, v, k in map.edges(keys=True):
-    #     pass
-
-    # map.add_nodes_from(nodes)
-    # _ = ox.plot_graph(map, bgcolor="white",
-    #                   node_size=3, node_color="red",
-    #                   edge_linewidth=0.3, edge_color="black")
+    # save the graph after connecting the detector nodes to the map
+    ox.io.save_graph_geopackage(nodes_map, networkDataRoot + "detector_nodes.gpkg")
 
 
 def main():
