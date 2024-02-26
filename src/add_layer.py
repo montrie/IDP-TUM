@@ -152,17 +152,46 @@ def mapAndPoint():
     print("Classification of detectors done.", csvlayer)
     project.setCrs(QgsCoordinateReferenceSystem('EPSG:3857'), True)
 
+    # TODO: from merge conflict -> do we still need this?
     # render the colored GEOPACKAGE
-    renderer = QgsGraduatedSymbolRenderer('', range_listforSHP)
-    classification_method = QgsApplication.classificationMethodRegistry().method("EqualInterval")
-    renderer.setClassificationMethod(classification_method)
+#    renderer = QgsGraduatedSymbolRenderer('', range_listforSHP)
+#    classification_method = QgsApplication.classificationMethodRegistry().method("EqualInterval")
+#    renderer.setClassificationMethod(classification_method)
     # renderer.setClassAttribute("OSMnx nodes_flow")
-    expression = 'case when "OSMnx nodes_flow" IS NULL then 0 else "OSMnx nodes_flow" end'
-    field = expression
-    renderer.setClassAttribute(field)
-    gpkg_edgelayer.setRenderer(renderer)
-    print("Classification of detectors done.", gpkg_edgelayer)
-    project.setCrs(QgsCoordinateReferenceSystem('EPSG:3857'), True)
+#    expression = 'case when "OSMnx nodes_flow" IS NULL then 0 else "OSMnx nodes_flow" end'
+#    field = expression
+#    renderer.setClassAttribute(field)
+#    gpkg_edgelayer.setRenderer(renderer)
+#    print("Classification of detectors done.", gpkg_edgelayer)
+#    project.setCrs(QgsCoordinateReferenceSystem('EPSG:3857'), True)
+    # TODO: end
+
+    # color detector edges using rule based symbols
+    linewidth = 1.2
+    range_list = [[('NULL', 'NULL'), "No data", QtGui.QColor('#D3D3D3')]] + trafficRanges
+    symbol = QgsSymbol.defaultSymbol(gpkg_edgelayer.geometryType())
+    edge_renderer = QgsRuleBasedRenderer(symbol)
+    root_rule = edge_renderer.rootRule()
+    for color_range in range_list:
+        rule = root_rule.children()[0].clone()
+        rule.setLabel(color_range[1])
+        # define the rule
+        expression = '"flow" >= {} AND "flow" <= {}'.format(color_range[0][0], color_range[0][1]) \
+            if color_range[1] != "No data" \
+            else '"flow" IS NULL'
+        rule.setFilterExpression(expression)
+        rule.symbol().setColor(color_range[2])
+        if color_range[1] != "No data":
+            rule.symbol().symbolLayer(0).setWidth(linewidth)
+        else:
+            rule.symbol().symbolLayer(0).setWidth(linewidth/2)
+        # rule.setMinimumScale(0.01)
+        # rule.setMaximumScale(1.0)
+        root_rule.appendChild(rule)
+    root_rule.removeChildAt(0)
+
+    gpkg_edgelayer.setRenderer(edge_renderer)
+    gpkg_edgelayer.triggerRepaint()
 
     # Center QGIS on the rlayer
     canvas = QgsMapCanvas()
