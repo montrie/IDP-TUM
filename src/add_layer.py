@@ -152,20 +152,6 @@ def mapAndPoint():
     print("Classification of detectors done.", csvlayer)
     project.setCrs(QgsCoordinateReferenceSystem('EPSG:3857'), True)
 
-    # TODO: from merge conflict -> do we still need this?
-    # render the colored GEOPACKAGE
-#    renderer = QgsGraduatedSymbolRenderer('', range_listforSHP)
-#    classification_method = QgsApplication.classificationMethodRegistry().method("EqualInterval")
-#    renderer.setClassificationMethod(classification_method)
-    # renderer.setClassAttribute("OSMnx nodes_flow")
-#    expression = 'case when "OSMnx nodes_flow" IS NULL then 0 else "OSMnx nodes_flow" end'
-#    field = expression
-#    renderer.setClassAttribute(field)
-#    gpkg_edgelayer.setRenderer(renderer)
-#    print("Classification of detectors done.", gpkg_edgelayer)
-#    project.setCrs(QgsCoordinateReferenceSystem('EPSG:3857'), True)
-    # TODO: end
-
     # color detector edges using rule based symbols
     linewidth = 1.2
     range_list = [[('NULL', 'NULL'), "No data", QtGui.QColor('#D3D3D3')]] + trafficRanges
