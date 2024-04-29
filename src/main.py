@@ -6,11 +6,14 @@ from pull_static_mobilithek import static_data
 from compare import output_data, compare_csv_files
 from clear_flow import clear_flow
 from visualise_network import plot
-import cProfile
 from config import ROOT_DIR
 
-PROFILE = False  # set to True to include profiling
+import cProfile
+import logging
+import warnings
 
+PROFILE = False  # set to True to include profiling
+warnings.simplefilter('error', DeprecationWarning)
 
 def run(condition: bool):
     """ For now: Entry point for the processing pipeline. Calls the different processing
@@ -18,9 +21,10 @@ def run(condition: bool):
 
     :param condition: specifies whether processing pipeline should run indefinitely
     """
-    while datetime.now().minute not in {0, 15, 30, 45}:
-        # Wait 1 second until we are synced up with the 'every 15 minutes' clock
-        sleep(1)
+    setup_logging()
+#    while datetime.now().minute not in {0, 15, 30, 45}:
+#        # Wait 1 second until we are synced up with the 'every 15 minutes' clock
+#        sleep(1)
 
     def task():
         xml_to_csv()
@@ -28,14 +32,21 @@ def run(condition: bool):
         output_data()
         compare_csv_files()
         clear_flow()
+        plot() 
         layer()
-        # plot() -> i think this suspends program until the plot instance is closed
 
     task()
 
     while condition:
-        sleep(60 * 15)  # Wait for 15 minutes
+        sleep(60 * 0)  # Wait for 15 minutes
         task()
+
+def setup_logging():
+    """
+    Setup the basic configuration of the logging module
+    """
+    logging.basicConfig(level=logging.INFO, filename="log.log", filemode="w",
+                        format="%(name)s %(asctime)s %(levelname)s %(message)s")
 
 
 def profile():
@@ -64,4 +75,5 @@ if __name__ == '__main__':
     if PROFILE:
         profile()
     else:
-        main()
+       # main()
+       run(True)
