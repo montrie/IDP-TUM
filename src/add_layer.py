@@ -196,7 +196,11 @@ def updateDataforWebsite(gpkg_edgelayer):
 
     (temp_fd, temp_path) = tempfile.mkstemp(suffix=".geojson")
     os.close(temp_fd)
-    _writer = QgsVectorFileWriter.writeAsVectorFormat(gpkg_edgelayer, temp_path, "utf-8", driverName="GeoJSON")
+    options = QgsVectorFileWriter.SaveVectorOptions()
+    options.fileEncoding = "utf-8"
+    options.driverName = "GeoJSON"
+    # qgis doesn't allow skipping the transform context by using the parameter name options=options, so we need to pass an empty context?
+    writer = QgsVectorFileWriter.writeAsVectorFormatV3(gpkg_edgelayer, temp_path, QgsCoordinateTransformContext(), options)
 
     # read GeoJSON file and save content in a Javascript variable
     with open(temp_path, 'r') as geojson_file:
