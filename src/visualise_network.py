@@ -46,7 +46,7 @@ def save_graph_shapefile_directional(graph: MultiDiGraph, filepath=None, encodin
     filepath_edges = os.path.join(filepath, "edges.shp")
 
     # convert undirected graph to gdfs and stringify non-numeric columns
-    gdf_nodes, gdf_edges = ox.utils_graph.graph_to_gdfs(graph)
+    gdf_nodes, gdf_edges = ox.convert.graph_to_gdfs(graph)
     gdf_nodes = ox.io._stringify_nonnumeric_cols(gdf_nodes)
     gdf_edges = ox.io._stringify_nonnumeric_cols(gdf_edges)
     # We need a unique ID for each edge
@@ -88,7 +88,7 @@ def get_detectors() -> (GeoDataFrame, [Point]):
 
     # create GeoDataFrame
     geometry = [Point(lon, lat) for lon, lat in zip(detector_df['lon'], detector_df['lat'])]
-    crs = {'init': 'epsg:4326'}
+    crs = 'epsg:4326'
     detector_gdf = GeoDataFrame(detector_df, crs=crs, geometry=geometry)
 
     # Add the point geometry as column to points.csv for fmm in cygwin
@@ -189,6 +189,7 @@ def connect_detector_nodes(G: MultiDiGraph, detector_nodes: [(float, float)], de
         for i in range(count):
             # https://stackoverflow.com/questions/72523683/#:~:text=Then%20you%20could%20e.g.%20define%20the%20new%20edge%20like%20this
             if i == 0:
+               # shortest_path() uses soon-to-be deprecated function great_circle_vec(), OSMnx 2.0 will rename this to great_circle(); fixed by hand
                 dist = shortest_path(G, (start_node['y'], start_node['x']), (float(sorted_dets[i][1]), float(sorted_dets[i][0])), e, e)[0]
                 G.add_edge(u, sorted_dets[i][2], **{**edge_attrs[0], 'geometry': new_geoms[i], 'length': round(dist, 3), 'flow': sorted_dets[i][3]})
             else:
