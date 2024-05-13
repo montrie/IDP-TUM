@@ -23,9 +23,8 @@ lrz_shp_file_path = rootPath + "/data/LRZ/munich_loops_mapping_in_progress.shp"
 
 # read LRZ shapefile and convert to csv file
 df = gpd.read_file(lrz_shp_file_path)
-df['geometry'] = df['geometry'].astype(str).str.replace('POINT (', '')
-df['geometry'] = df['geometry'].astype(str).str.replace(')', '')
-df[['lon','lat']] = df['geometry'].str.split(' ',expand=True)
+df['lat'] = df['geometry'].y
+df['lon'] = df['geometry'].x
 df.rename(columns={'DETEKTO':'detid'}, inplace=True)
 df.to_csv(lrz_csv_file_path, sep=',', encoding='utf-8')
 
@@ -65,10 +64,8 @@ def output_data():
     b = pd.read_csv(latest_static_data_csv)
 
     output = a.merge(b, on="detid", how="left").fillna(0).set_index("detid")
-    zero_coords_filter = (output['lat'] == 0) | (output['lon'] == 0)
-    zero_coords_filter2 = (output['lat'] == 0.0) | (output['lon'] == 0.0)
+    zero_coords_filter = (output['lat'] == 0) | (output['lat'] == 0.0) | (output['lon'] == 0) | (output['lon'] == 0.0)
     output = output[~zero_coords_filter]
-    output = output[~zero_coords_filter2]
 
     output.to_csv(
         os.path.join(
