@@ -8,6 +8,7 @@ import networkx as nx
 import osmnx as ox
 import pandas as pd
 import numpy as np
+import logging
 
 from networkx import MultiDiGraph
 from geopandas import GeoDataFrame
@@ -17,6 +18,7 @@ from osmnx import settings, utils_graph, io
 from shutil import copy
 from config import ROOT_DIR
 from copy import deepcopy
+from match import match  # TODO: match seems to be a 'soft' keyword since python3.10 -> maybe an issue?
 from osmnx.distance import nearest_edges
 from taxicab.distance import shortest_path
 
@@ -28,13 +30,24 @@ path_map_munich = ROOT_DIR + "/data/network/simplify_map_munich.graphml"
 mergedDataRoot = ROOT_DIR + "/data/merged_data/"
 xmlDataRoot = ROOT_DIR + "/data/xml_data/"
 networkDataRoot = ROOT_DIR + "/data/network/"
+networkShapeFiles = ["edges.shp", "edges.shx", "edges.prj", "edges.dbf", "edges.cpg", "nodes.shp", "nodes.shx", "nodes.prj", "nodes.dbf", "nodes.cpg"]
 
 node_size = 3  # used to define the size of map matched detector nodes; 2 is default size
 ox.settings.use_cache = False
 ox.settings.log_console = False
 
+#TODO: add documentation
+
+def delete_network_files(files: [str]):
+    for file in files:
+        path = os.path.join(networkDataRoot, file)
+        print(path)
+        if os.path.isfile(path):
+            os.remove(path)
+
 
 def save_graph_shapefile_directional(graph: MultiDiGraph, filepath=None, encoding="utf-8"):
+    delete_network_files(networkShapeFiles)
     # default filepath if none was provided
     if filepath is None:
         filepath = os.path.join(ox.settings.data_folder, "shapefile")
@@ -51,9 +64,11 @@ def save_graph_shapefile_directional(graph: MultiDiGraph, filepath=None, encodin
     gdf_edges = ox.io._stringify_nonnumeric_cols(gdf_edges)
     # We need a unique ID for each edge
     gdf_edges["fid"] = np.arange(0, gdf_edges.shape[0], dtype='int')
-    # save the nodes and edges as separate ESRI shapefiles
-    gdf_nodes.to_file(filepath_nodes, encoding=encoding)
-    gdf_edges.to_file(filepath_edges, encoding=encoding)
+    # some column names exceed the 10 character limit, so let's rename them
+    gdf_nodes.rename(columns={'street_count': 'street_cnt'}, inplace=True)
+    # save the nodes and edges as separate ESRI shapefiles 
+    gdf_nodes.to_file(filepath_nodes, encoding=encoding, driver='ESRI Shapefile')
+    gdf_edges.to_file(filepath_edges, encoding=encoding, driver='ESRI Shapefile')
 
 
 def get_base_graphml() -> MultiDiGraph:
@@ -82,7 +97,7 @@ def get_detectors() -> (GeoDataFrame, [Point]):
     :return: The resulting GeoDataFrame and a list of the created Points
     """
     
-    # load detector static_data
+    # load detectors from merged_data
     latest_merged_data_csv = max(glob.glob(mergedDataRoot + "*.csv"), key=os.path.getctime)
     detector_df = pd.read_csv(latest_merged_data_csv)
 
@@ -92,10 +107,6 @@ def get_detectors() -> (GeoDataFrame, [Point]):
     detector_gdf = GeoDataFrame(detector_df, crs=crs, geometry=geometry)
 
     # Add the point geometry as column to points.csv for fmm in cygwin
-    # detector_df.insert(11, "geom", geometry, True)
-    # TODO: replace path to local cygwin64 installation or comment it out -> contains example result of fmm
-    # in data/network/matched.csv
-    # detector_gdf.to_csv("D:\\cygwin64\\home\\User\\fmm\\matching\\network\\points.csv", sep=";")
     detector_gdf.to_csv(networkDataRoot + "points.csv", sep=";")
 
     return detector_gdf, geometry, latest_merged_data_csv
@@ -218,13 +229,7 @@ def plot():
     print(merged_data_csv)
 
     # https://stackoverflow.com/questions/64104884/osmnx-project-point-to-street-segments
-    print("TODO: Automate the matching using fmm and copy the result into data/network")
-    print("The resulting file is data/network/matched.csv")
-
     # get mapped points
-    # TODO: for the server, we can just move matched.csv to the correct location instead of reading and writing the file
-    # copy("D:\\cygwin64\\home\\User\\fmm\\matching\\network\\matched.csv",
-    #      networkDataRoot+"matched.csv")
     match("points.csv")
     df_matched = pd.read_csv(networkDataRoot + "matched.csv", sep=";")
 
@@ -254,8 +259,12 @@ def plot():
     # reformat detector locations from [LINESTRING(lon lat,lon lat)] to [(lat, lon)]
     detector_ids = []  # useful to map detector nodes to existing edges
     for id, node in matched_detector_locations.values:
+        try:
+            flow = flows.loc[id, 'flow']
+        except Exception as e:
+            logging.error(f"Tried accessing id {id} in {plot.__name__}, but could not find it.\n{e}")
+
         lon_lat = node.split(',')[0][11:].split(' ')
-        flow = flows.loc[id, 'flow']
         flow_list.append(flow)
         nodes_list.append((lon_lat[1], lon_lat[0]))
         detector_ids.append(id)
