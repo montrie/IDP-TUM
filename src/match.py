@@ -44,6 +44,7 @@ def match(fpoints: str):
     ubodt = UBODT.read_ubodt_csv(network_dir+"/ubodt.txt")
     
     ### Create FMM model
+    # TODO: maybe use STMATCH instead? 
     model = FastMapMatch(network,graph,ubodt)
     
     ### Define map matching configurations
@@ -54,12 +55,6 @@ def match(fpoints: str):
 
     ### Define GPS configurations
     gps_config = GPSConfig()
-#                           file_arg=fpoints,
-#                           id_arg='detid',
-#                           geom_arg='geometry',
-#                           x_arg='lon',
-#                           y_arg='lat',
-#                           gps_point_arg=True)
     gps_config.file = network_dir + "/" + fpoints
     gps_config.id = 'detid'
     gps_config.geom = 'geometry'
@@ -75,21 +70,4 @@ def match(fpoints: str):
     ### Run map matching for GPS files
     status = model.match_gps_file(gps_config, result_config, fmm_config)
     print(status)
-    
-    ### Run map matching for wkt
-    # wkt = "LineString(104.10348 30.71363,104.10348 30.71363,104.10348 30.71363,104.10348 30.71363,104.10348 30.71363)"
-    # result = model.match_wkt(wkt,fmm_config) # wkt comes from cl input
-    
-    ### Print map matching result
-    # print("Opath ",list(result.opath))
-    # print("Cpath ",list(result.cpath))
-    # print("WKT ",result.mgeom.export_wkt())
-    
-    # TODO: 
-    """
-    1. find out how to modify FastMapMatchConfig to mimic the behaviour of the command line execution of fmm:
-       fmm --ubodt "ubodt.txt" --network "edges.shp" --network_id "fid" --source "u" --target "v" --gps "points.csv" --gps_id "detid" --gps_x 'lon' --gps_y 'lat' --gps_geom "geometry" --gps_point 1 --output "matched.csv" -k 8 -r 0.003 -e 0.0005
-    2. either use the script above or write a CL script that is then executed by python mimicking command line behaviour
-    
-    -> there is a bunch of config classes, can probably use these to mimick behaviour of command line call of fmm
-    """
+        
