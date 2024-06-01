@@ -6,27 +6,20 @@ from pull_static_mobilithek import static_data
 from compare import output_data, compare_csv_files
 from clear_flow import clear_flow
 from visualise_network import plot
+from website import update_website
 from config import ROOT_DIR
 
 import cProfile
 import logging
 import warnings
 
+LOOP = False
 PROFILE = False  # set to True to include profiling
-warnings.simplefilter('error', DeprecationWarning)
+INTERVAL = 15  # defines at which multiple of 60 minutes in an hour we want to run task()
+# warnings.simplefilter('error', DeprecationWarning)
 
-def run(condition: bool):
-    """ For now: Entry point for the processing pipeline. Calls the different processing
-    steps before sleeping for 15 minutes if ``condition`` is ``True``
 
-    :param condition: specifies whether processing pipeline should run indefinitely
-    """
-    setup_logging()
-#    while datetime.now().minute not in {0, 15, 30, 45}:
-#        # Wait 1 second until we are synced up with the 'every 15 minutes' clock
-#        sleep(1)
-
-    def task():
+def task():
         xml_to_csv()
         static_data()
         output_data()
@@ -34,12 +27,24 @@ def run(condition: bool):
         clear_flow()
         plot() 
         layer()
+        update_website()
+
+
+def run(condition: bool):
+    """ For now: Entry point for the processing pipeline. Calls the different processing
+    steps before sleeping for 15 minutes if ``condition`` is ``True``
+
+    :param condition: specifies whether processing pipeline should run indefinitely
+    """
+#    while datetime.now().minute not in range(0, 60, INTERVAL):
+#        # Wait 1 second until we are synced up with the 'every 15 minutes' clock
+#        sleep(60)
 
     task()
 
-    while condition:
-        sleep(60 * 0)  # Wait for 15 minutes
-        task()
+#    if condition:
+#        run(condition)
+
 
 def setup_logging():
     """
@@ -72,8 +77,9 @@ def main():
 
 
 if __name__ == '__main__':
+    setup_logging()
     if PROFILE:
         profile()
     else:
        # main()
-       run(True)
+       run(LOOP)
