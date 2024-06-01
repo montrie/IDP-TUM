@@ -66,7 +66,28 @@ def pull_and_save_data(working_directory=os.getcwd()):
                 anyVehicle, car, lorry, lorryAndVehicleWithTrailer, articulatedVehicle, anyVehicle_unknown, carWithTrailer, van, bus, motorcycle = -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
                 speed_carOrLightVehicle, speed_lorry = -1, -1
                 if type(row.measuredValue) == dict:
-                    anyVehicle = row.measuredValue['measuredValue']['basicData']['vehicleFlow']['vehicleFlowRate']
+#                    anyVehicle = row.measuredValue['measuredValue']['basicData']['vehicleFlow']['vehicleFlowRate']
+                  if 'vehicleFlow' in measurement['measuredValue']['basicData'].keys():
+                    if int(row.measuredValue['@index']) == 10:
+                      anyVehicle = row.measuredValue['measuredValue']['basicData']['vehicleFlow']['vehicleFlowRate']
+                    elif int(measurement['@index']) == 11:
+                        car = cur_val
+                    elif int(measurement['@index']) == 12:
+                        lorry = cur_val
+                    elif int(measurement['@index']) == 13:
+                        lorryAndVehicleWithTrailer = cur_val
+                    elif int(measurement['@index']) == 14:
+                        articulatedVehicle = cur_val
+                    elif int(measurement['@index']) == 15:
+                        anyVehicle_unknown = cur_val
+                    elif int(measurement['@index']) == 16:
+                        carWithTrailer = cur_val
+                    elif int(measurement['@index']) == 17:
+                        van = cur_val
+                    elif int(measurement['@index']) == 18:
+                        bus = cur_val
+                    elif int(measurement['@index']) == 19:
+                        motorcycle = cur_val
                 else:
                     if not type(row.measuredValue) == list:
                         anyVehicle = math.nan
@@ -95,11 +116,12 @@ def pull_and_save_data(working_directory=os.getcwd()):
                                 elif int(measurement['@index']) == 19:
                                     motorcycle = cur_val
                             else:
-                                cur_val = measurement['measuredValue']['basicData']['averageVehicleSpeed']['speed']
-                                if int(measurement['@index']) == 21:
-                                    speed_carOrLightVehicle = cur_val
-                                elif int(measurement['@index']) == 22:
-                                    speed_lorry = cur_val
+                                if 'averageVehicleSpeed' in measurement['measuredValue']['basicData'].keys():
+                                    cur_val = measurement['measuredValue']['basicData']['averageVehicleSpeed']['speed']
+                                    if int(measurement['@index']) == 21:
+                                        speed_carOrLightVehicle = cur_val
+                                    elif int(measurement['@index']) == 22:
+                                        speed_lorry = cur_val
                 all_data.append([det_id, date_time, anyVehicle, car, lorry, lorryAndVehicleWithTrailer, articulatedVehicle, anyVehicle_unknown, carWithTrailer, van, bus, motorcycle, speed_carOrLightVehicle, speed_lorry])
             all_data_df = pd.DataFrame(all_data, columns = ['detid','date_time', 'flow', 'car', 'lorry', 'lorryAndVehicleWithTrailer', 'articulatedVehicle', 'anyVehicle_unknown', 'carWithTrailer', 'van', 'bus', 'motorcycle', 'speed_carOrLightVehicle', 'speed_lorry'])
             all_data_df.to_csv(os.path.join(working_directory, filename))
