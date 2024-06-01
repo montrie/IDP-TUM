@@ -105,10 +105,18 @@ def mapAndPoint():
     options = '?delimiter={}&xField=lon&yField=lat&crs=epsg:4326'.format(delim)
     uri = "file:///{}{}".format(merged_points_data_csv, options)
 
-    add_vector_layer(layer          := QgsVectorLayer(edgesData, "testlayer_shp", "ogr"))
-    add_vector_layer(gpkg_edgelayer := QgsVectorLayer(nodesData + "|layername=edges", "OSMnx edges", "ogr"))
-    add_vector_layer(gpkg_nodelayer := QgsVectorLayer(nodesData + "|layername=nodes", "OSMnx nodes", "ogr"))
-    add_vector_layer(csvlayer       := QgsVectorLayer(uri, "Points", "delimitedtext"))
+    try:
+        layer = QgsVectorLayer(edgesData, "testlayer_shp", "ogr")
+        gpkg_edgelayer = QgsVectorLayer(nodesData + "|layername=edges", "OSMnx edges", "ogr")
+        gpkg_nodelayer = QgsVectorLayer(nodesData + "|layername=nodes", "OSMnx nodes", "ogr")
+        csvlayer = QgsVectorLayer(uri, "Points", "delimitedtext")
+    except Exception as e:
+        logging.debug(e)
+
+    add_vector_layer(layer)
+    add_vector_layer(gpkg_edgelayer)
+    add_vector_layer(gpkg_nodelayer)
+    add_vector_layer(csvlayer)
 
     shpField = 'fid'
     csvField = 'fid'
