@@ -32,22 +32,20 @@ df.to_csv(lrz_csv_file_path, sep=',', encoding='utf-8')
 def compare_csv_files():
     latest_outputdata_data_csv = max(glob.glob(outputDataRoot+"*.csv"), key=os.path.getctime)
 
-    a = pd.read_csv(lrz_munich_loops_path)
-    b = pd.read_csv(latest_outputdata_data_csv)
+    a = pd.read_csv(lrz_munich_loops_path, index_col=0)
+    b = pd.read_csv(latest_outputdata_data_csv, index_col=0)
 
-    output = a.merge(b, on="detid", how="left").fillna(0).set_index("detid")
-    zero_coords_filter = (output['lat_x'] == 0) | (output['lon_x'] == 0)
-    output = output[~zero_coords_filter]
+    # a LEFT JOIN b on lat, lon columns
+    output = a.merge(b, on=["lat", "lon"], how="left").fillna(0).set_index("detid")
     output.to_csv(comparedDataRoot+datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S").replace("-", "_")+"_output.csv")
 
     latest_compared_data_csv = max(glob.glob(comparedDataRoot+"*.csv"), key=os.path.getctime)
     df = pd.read_csv(latest_compared_data_csv)
-    df = df.rename(columns=({'lon_x': 'lon'}))
-    df = df.rename(columns=({'lat_x': 'lat'}))
-    del df['lon_y']
-    del df['lat_y']
+#    df = df.rename(columns=({'lon_x': 'lon'}))
+#    df = df.rename(columns=({'lat_x': 'lat'}))
     del df['geometry']
     df.to_csv(mergedDataRoot+datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S").replace("-", "_")+"_merged.csv", sep=',', encoding='utf-8')
+
 
 def output_data():
     """
@@ -60,10 +58,11 @@ def output_data():
 
     # merge_detector_locations(latest_static_data_csv)
 
-    a = pd.read_csv(latest_xml_data_csv)
-    b = pd.read_csv(latest_static_data_csv)
+    a = pd.read_csv(latest_xml_data_csv, index_col=0)
+    b = pd.read_csv(latest_static_data_csv, index_col=0)
 
     output = a.merge(b, on="detid", how="left").fillna(0).set_index("detid")
+    output.to_csv(mergedDataRoot + "test_output_pre_clear.csv")
     zero_coords_filter = (output['lat'] == 0) | (output['lat'] == 0.0) | (output['lon'] == 0) | (output['lon'] == 0.0)
     output = output[~zero_coords_filter]
 
@@ -78,7 +77,9 @@ def output_data():
 
 
 if __name__ == "__main__":
-    import sys
+    output_data()
+    compare_csv_files()
+"""    import sys
 
     print(sys.path)
     # compare_csv("2023_11_15_12_32_42_15min.csv", "2023_11_15_14_51_03_15min_static.csv")
@@ -93,4 +94,4 @@ if __name__ == "__main__":
     zero_coords_filter2 = (output['lat'] == 0.0) | (output['lon'] == 0.0)
     output = output[~zero_coords_filter]
     output = output[~zero_coords_filter2]
-    output.to_csv("output_data/"+datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S").replace("-", "_")+"_output.csv")
+    output.to_csv("output_data/"+datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S").replace("-", "_")+"_output.csv")"""
