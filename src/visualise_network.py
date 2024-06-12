@@ -246,7 +246,7 @@ def plot():
             return ls[:-1] + ",{} {})".format(lon, lat)
 
     # some matched detector locations are broken -> fix them and add them back to the 'mgeom' column
-    df_matched["mgeom"] = df_matched["mgeom"].apply(_fix_linestring)
+    # df_matched["mgeom"] = df_matched["mgeom"].apply(_fix_linestring)
 
     # get id and mgeom columns from matched detector locations
     matched_detector_locations = df_matched[["id", "mgeom"]]
@@ -258,7 +258,15 @@ def plot():
 
     # reformat detector locations from [LINESTRING(lon lat,lon lat)] to [(lat, lon)]
     detector_ids = []  # useful to map detector nodes to existing edges
+    missing_ids = []
+
+    # TODO: matched_detector_locations comes from matched_zero_flows.csv, there might be a mismatch in detector ids between that csv and the xml one
+    # clean it somehow
+    xml_ids = set(df_xml["detid"].tolist())
     for id, node in matched_detector_locations.values:
+        if id not in xml_ids:
+            missing_ids.append(id)
+            continue
         try:
             flow = flows.loc[id, 'flow']
         except Exception as e:
@@ -274,6 +282,9 @@ def plot():
     # create a node dict that sets the size of a node depending on its flow value -> effectively hide non-detector nodes
     nodes_sizes_dict = {n[0]: 0 if n[1] == "NULL" else node_size for n in nodes_map.nodes(data='flow', default="NULL")}
     nx.set_node_attributes(nodes_map, nodes_sizes_dict, "size")
+
+    # drop rows where the id was not in the latest xml file
+    df_matched = df_matched[~df_matched.id.isin(missing_ids)]
 
     # add lon, lat columns to matched.csv so we can add it to add_layer.py
     if 'lon' not in df_matched:
