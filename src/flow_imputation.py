@@ -160,7 +160,6 @@ def fill_nearest_neighbors(G: MultiDiGraph, base_node: int, k: int, immediate_ne
         return nearest_neighbors + newest
 
 
-# def k_nearest_neighbors(G: MultiDiGraph, neighbors: {int: (int, float)}, k: int = 5) -> dict:
 def k_nearest_neighbors(G: MultiDiGraph, immediate_neighbors: dict, k: int = 5) -> dict:
     # implement a BFS that finds the k nearest neighbors of each node of G
     # neighbors contains k,v pairs where k = node_id and v = (neighbor, distance)
@@ -175,8 +174,6 @@ def k_nearest_neighbors(G: MultiDiGraph, immediate_neighbors: dict, k: int = 5) 
         _ = [q.put_nowait(item) for item in current_neighbors]
         nearest_neighbors = fill_nearest_neighbors(G, node, k, immediate_neighbors, q)
         knn[node] = sorted(nearest_neighbors, key=lambda x: x[-1])
-        # print(len(knn))
-        # break
 
     end = time.time_ns()
     print("{}s to run fill_nearest_neighbors with k = {} for {} nodes in G".format((end - start) / 1e9, k, len(immediate_neighbors)))
@@ -199,23 +196,51 @@ def imputation_scheme(G: MultiDiGraph,nearest_neighbors: dict()) -> MultiDiGraph
     all_flows = nx.get_node_attributes(G_read, 'flow', default=0)
 
     factor = 100
+    # test = nearest_neighbors[267723]
+    # print(nearest_neighbors[267723])
     for node in G_read:
         if G_read.nodes[node]['prior_flow']:
             continue
         pre = []
         for n in G_read.predecessors(node):
             pre.append(n)
-        if len(pre) == 1:
+
+        node_neighbors = nearest_neighbors[node]
+
+        if not node_neighbors:
+            continue
+        post = [n for n in node_neighbors if n[1] == n[2]]
+        check = (len(pre) > 1, len(post) > 1)
+
+        if check == (False, False):
+            # only one predecessor and successor
             # if we have only 1 predecessor and only 1 neighbor where the immediate distance is equal to the
             # total distance, we have a 'line' of nodes where we can probably just use the same flow value for all nodes on that line
-            print("check")
-        node_neighbors = nearest_neighbors[node]
-        flows_distances = np.array([(all_flows[neighbor_id], total_distance) for neighbor_id, _, total_distance in node_neighbors])
-        flows, distances = flows_distances[:, 0], flows_distances[:, 1]
-        # maybe use 100/total_distance instead of 1/total_distance
-        weights = np.array([factor/total_distance for total_distance in distances])
-        # https://stackoverflow.com/questions/20054243/np-mean-vs-np-average-in-python-numpy
-        imputed_flow = np.average(flows, weights=weights)
+            # print("check")
+            pre = all_flows[pre[0]] if pre else all_flows[node_neighbors[0][0]]
+            imputed_flow = (pre + all_flows[node_neighbors[0][0]]) / 2
+        #TODO: do we need a case distinction for this or can we just replace this with an else
+        elif check == (False, True) or check == (True, False) or check == (True, True):
+            # (False, False) means multiple predecessors and successors -> we want to probably use all nearest_neighbors
+            flows_distances = np.array(
+                [(all_flows[neighbor_id], total_distance) for neighbor_id, _, total_distance in node_neighbors])
+            # if len(flows_distances.shape) != 2:
+            #     print("check")
+            # try:
+            flows, distances = flows_distances[:, 0], flows_distances[:, 1]
+            # except:
+            #     print("check")
+            # maybe use 100/total_distance instead of 1/total_distance
+            # try:
+            #     for td in distances:
+            #         if td == 0 or td == 0.0:
+            #             print("0 division?")
+            weights = np.array([factor / (total_distance if total_distance > 0 else 1) for total_distance in distances])
+            # except:
+            #     print("Division by 0?")
+            # https://stackoverflow.com/questions/20054243/np-mean-vs-np-average-in-python-numpy
+            imputed_flow = np.average(flows, weights=weights)
+
         G_write.nodes[node]['flow'] = imputed_flow
  
     return G_write
@@ -224,40 +249,15 @@ def imputation_scheme(G: MultiDiGraph,nearest_neighbors: dict()) -> MultiDiGraph
 def impute():
     with open(os.path.join(networkDataRoot, "simplify_nodes_map.gpickle"), 'rb') as f:
         G = pickle.load(f)
-    print(f"sklearn version: {sklearn.__version__}")
-
-#     # Extract and print all unique edge attribute names
-#     edge_attrs = set()
-#     for u, v, key, attr in G.edges(keys=True, data=True):
-#         edge_attrs.update(attr.keys())
-#     print("Edge attribute names:", edge_attrs)
-#
-#     # extract edges and attributes into a DataFrame
-#     edges = []
-#     for u, v, key, data in G.edges(keys=True, data=True):
-#         edges.append((u, v, key, data.get('flow', 0), data))
-#     df = pd.DataFrame(edges, columns=['u', 'v', 'key', 'flow', 'attributes'])
-#
-#     # add specific features
-#     df['length'] = df['attributes'].apply(lambda x: x.get('length', 0))
-# #    df['speed_limit'] = df['attributes'].apply(lambda x: x.get('maxspeed', 0))
-#     df_knn = df.drop(columns=["attributes", "key", "flow"])
-#     print(df_knn.head())
 
     # create attribute that keeps track whether a node contained a flow value prior to imputation
     flow_attr = nx.get_node_attributes(G, 'flow', default=0)
     prior_flow = {k: v > 0 for k, v in flow_attr.items()}
     nx.set_node_attributes(G, prior_flow, 'prior_flow')
-
-    # # Extract and print all unique node attribute names
-    # node_attrs = set()
-    # for node, attr in G.nodes(data=True):
-    #     node_attrs.update(attr.keys())
-    # print("Node attribute names:", node_attrs)
+    print(f"Number of nodes: {G.number_of_nodes()}")
 
     # Compute the shortest path distances between nodes
 #TODO: parallelize https://stackoverflow.com/questions/69649566/how-do-i-speed-up-all-pairs-dijkstra-path-length
-    print(f"Number of nodes: {G.number_of_nodes()}")
 
     # dict of node: (neighbor, distance) pairs
     immediate_neighbors = find_immediate_neighbors(G)
@@ -265,7 +265,6 @@ def impute():
     nearest_neighors = k_nearest_neighbors(G, immediate_neighbors, k)
     # for k in range(1,30):
     #     nearest_neighors = k_nearest_neighbors(G, immediate_neighbors, k)
-    print("check")
 
     # impute the flow values according to some scheme
     G = imputation_scheme(G, nearest_neighors)
@@ -273,7 +272,7 @@ def impute():
     # TODO: we probably need to save G as a graphml file here again if the imputation happens before the visualisation
     # but i think its visualise -> impute, so the save_graphfile_directional function from visualise_network.py
     # should be moved here, because that function creates a bunch of shp files that we need in add_layer.py
-    save_graph_shapefile_directional(G)
+    save_graph_shapefile_directional(G, filepath=networkDataRoot)
     with open(os.path.join(networkDataRoot, "imputed_nodes_map.gpickle"), 'wb') as f:
         # G = pickle.load(f)
         pickle.dump(G, f)
