@@ -40,9 +40,9 @@ def remove_row(folder_path: str):
             zero_speed_count = (detector_rows['flow'] == 0).sum()
             total_rows = len(detector_rows)
 # TODO: this currently only checks for 0 flow in the newest csv file, not in all files that were checked in folder_path
-            if zero_speed_count / total_rows >= 0.8:
-                df = df[
-                    ~((df['detid'] == detector_id) & (df['flow'] == 0))]
+#             if zero_speed_count / total_rows >= 0.8:
+#                 df = df[
+#                     ~((df['detid'] == detector_id) & (df['flow'] == 0))]
     df.to_csv(latest_file, index=False)
     end = time.time_ns()
     logging.info(f"Running remove_row() took {(end-start)/1e9:.2f}s")
