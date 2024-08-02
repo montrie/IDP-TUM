@@ -1,9 +1,4 @@
 import copy
-
-import sys
-sys.path.insert(-1, r"D:\Program Files\QGIS 3.32.3\apps\gdal\lib\gdalplugins")
-sys.path.insert(-1, r"C:\OSGeo4W\apps\gdal\lib\gdalplugins")
-
 import os
 import time
 import pickle
@@ -22,9 +17,8 @@ from config import ROOT_DIR
 from collections import defaultdict
 from scipy.spatial import KDTree
 from networkx import MultiDiGraph
-from numba import jit
 from queue import SimpleQueue
-from src.visualise_network import save_graph_shapefile_directional
+from visualise_network import save_graph_shapefile_directional
 
 
 networkDataRoot = os.path.join(ROOT_DIR, "data/network")
@@ -181,6 +175,127 @@ def k_nearest_neighbors(G: MultiDiGraph, immediate_neighbors: dict, k: int = 5) 
     return knn
 
 
+def k_nearest_detectors_astar(G: MultiDiGraph, k: int = 5) -> dict:
+    knd = {}
+    detectors = []
+    for n, ddict in G.nodes(data=True):
+        if ddict['prior_flow'] == True: # is the 'True' value in 'prior_flow' saved as a string??
+            detectors.append(n)  # TODO: atm, this discards detectors that don't work aka measure 0 flow -> maybe we want them anyway?
+
+    for n in G.nodes:
+        # skip node if it is a detector with a flow value
+        if n in detectors:
+            continue
+        sp = []
+        print("start astar_path_length timer")
+        start = time.time_ns()
+        for d in detectors:
+            try:
+                # TODO: use the correct shortest path function, also parallelize
+                sp.append((d, nx.astar_path_length(G, n, d, weight='length')))
+            except nx.NetworkXNoPath:
+                # ignore detectors that we can't reach
+                pass
+        end = time.time_ns()
+        print("{}s to run astar_path_length for 1 source node to {} detector nodes".format((end - start) / 1e9, len(detectors)))
+        print(f"we have {len(G.nodes)} source nodes")
+        # TODO: sp should be of form [(node, distande)]
+        knd[n] = sorted(sp, key=lambda x: x[-1])[:k]
+
+        break
+
+    return knd
+
+
+def k_nearest_detectors(G:MultiDiGraph, immediate_neighbors: dict, k: int = 5) -> dict:
+    knd = {}
+    detectors = []
+    for n, ddict in G.nodes(data=True):
+        if ddict['prior_flow'] == True: # is the 'True' value in 'prior_flow' saved as a string??
+            detectors.append(n)  # TODO: atm, this discards detectors that don't work aka measure 0 flow -> maybe we want them anyway?
+
+    print("start timer")
+    start = time.time_ns()
+
+    for node, current_neighbors in immediate_neighbors.items():
+    # skip node if it is a detector with a prior flow value
+        if n in detectors:
+            continue
+        q = SimpleQueue()
+        _ = [q.put_nowait(item) for item in current_neighbors]
+        nearest_neighbors = fill_nearest_detectors(G, node, k, detectors, immediate_neighbors, q, [])
+        knn[node] = sorted(nearest_neighbors, key=lambda x: x[-1])
+
+    end = time.time_ns()
+    print("{}s to run fill_nearest_detectors with k = {} for {} nodes in G".format((end - start) / 1e9, k, len(immediate_neighbors)))
+
+    return knd
+
+
+def fill_nearest_detectors(G: MultiDiGraph, base_node: int, k: int, detectors: list, immediate_neighbors: dict, current_neighbors: SimpleQueue, nearest_neighbors: list = [], latest_detectors: list = []):
+    # current_neighbors = [(neighbor, distance)]
+    # need to keep track of the most recent current_neighbors, because the first few current_neighbors might have closer
+    # detectors down the line than the last few current_neighbors
+    prev = []
+    while not current_neighbors.empty():
+        prev.append(current_neighbors.get_nowait())
+
+    # base case: no neighbors -> node is a dead end
+    if len(prev) == 0:
+        return nearest_neighbors
+    # find detector nodes in prev
+    nd = [node for node in prev if node in detectors]
+
+    # document what is happening here
+    next_neighbors1 = [immediate_neighbors[neighbor[0]] for neighbor in prev]
+    next_neighbors = [[n for n in l if n[0] not in list(zip(*nearest_neighbors))[0] and n[0] != base_node] for l in next_neighbors1]
+
+    # when prev has more than one entry, next will be a list of lists -> need to flatten a list that is only potentially a list of lists
+    temp = []
+    for i, neighbor in enumerate(next_neighbors):
+        #TODO: add the distance from the previous entry to the next entry to get the total distance to the base node
+        if isinstance(neighbor, list):
+            for n in range(len(neighbor)):
+                temp.append((next_neighbors[i][n][0], next_neighbors[i][n][1], next_neighbors[i][n][-1] + prev[i][-1]))
+        else:
+            temp.append((next_neighbors[i][0], next_neighbors[i][1], next_neighbors[i][-1] + prev[i][-1]))
+
+    # some nodes don't have successors -> return current nearest_neighbors
+    if len(temp) == 0:
+        return nearest_neighbors
+
+    temp = sorted(temp, key=lambda x: x[-1])
+    # we need to create successors with the first element of temp included, otw. the next if condition fails 
+    # (can't access the first element of an empty list)
+    successors = [temp[0]]
+    for i in range(1, len(temp)):
+        if temp[i][0] not in list(zip(*successors))[0]:
+            successors.append(temp[i])
+
+    for neighbor in successors:
+        current_neighbors.put_nowait(neighbor)
+
+    # ---------- RECURSIVE CALL ---------- #
+    if len(nearest_neighbors) == k:
+        # TODO: otw. append nd to newest_detectors, sort, and take the first k detectors, should work because at that point we already keep track of the next nodes we want to visit
+        if nd:
+            nearest_neighbors = sorted(nearest_neighbors + nd, key=lambda x: x[-1])[:k]
+        if successors[0][-1] >= nearest_neighbors[-1][-1]:
+        # end recursion if first node of list of nodes were are currently traversing is farther from base_node than the farthest detector in nearest_neighbors
+            return nearest_neighbors
+        return fill_nearest_detectors(G, base_node, k, detectors, immediate_neighbors, current_neighbors, nearest_neighbors, latest_detectors)
+    elif len(nearest_neighbors) + len(nd) >= k:
+        nearest_neighbors = sorted(nearest_neighbors + nd, key=lambda x: x[-1])[:k]
+        latest_detectors = nd[:rest]
+        return fill_nearest_detectors(G, base_node, k, detectors, immediate_neighbors, current_neighbors, nearest_neighbors, latest_detectors)
+    else:
+        # len(nearest_neighbors) + len(nd) < k
+        if nd:
+            # we found at least one detector
+            nearest_neighbors = sorted(nearest_neighbors + nd, key=lambda x: x[-1])
+        return fill_nearest_detectors(G, base_node, k, detectors, immediate_neighbors, current_neighbors, nearest_neighbors)
+
+
 def imputation_scheme(G: MultiDiGraph,nearest_neighbors: dict()) -> MultiDiGraph:
     # TODO: we can impute the flow while either considering intermittent results, i.e. write imputed flows to the
     # graph we read from, or create a copy so we have one 'read' and one 'write' graph
@@ -201,6 +316,9 @@ def imputation_scheme(G: MultiDiGraph,nearest_neighbors: dict()) -> MultiDiGraph
     for node in G_read:
         if G_read.nodes[node]['prior_flow']:
             continue
+        if node not in nearest_neighbors:
+            continue
+
         pre = []
         for n in G_read.predecessors(node):
             pre.append(n)
@@ -261,15 +379,47 @@ def impute():
 
     # dict of node: (neighbor, distance) pairs
     immediate_neighbors = find_immediate_neighbors(G)
-    k = 7
-    nearest_neighors = k_nearest_neighbors(G, immediate_neighbors, k)
+# TODO: k = min(k, num_detectors)
+    k = 5
+# TODO: typo
+#    nearest_neighbors = k_nearest_neighbors(G, immediate_neighbors, k)
+#    nearest_neighbors = k_nearest_detectors_astar(G, k)
+    nearest_neighbors = k_nearest_detectors(G, immediate_neighbors, k)
     # for k in range(1,30):
-    #     nearest_neighors = k_nearest_neighbors(G, immediate_neighbors, k)
+    #     nearest_neighbors = k_nearest_neighbors(G, immediate_neighbors, k)
+
+    detector_nodes = []
+    for n, ddict in G.nodes(data=True):
+        if ddict['prior_flow'] == True: # is the 'True' value in 'prior_flow' saved as a string??
+            detector_nodes.append(n)  # TODO: atm, this discards detectors that don't work aka measure 0 flow -> maybe we want them anyway?
+#    print(detector_nodes)
+    for node, neighbors in nearest_neighbors.items():
+        if node in detector_nodes:
+            print(f"node {node} is in detector_nodes")
+        for neighbor in neighbors:
+            if neighbor not in detector_nodes:
+                print(f"assumed detector neighbor {neighbor} is not in detector_nodes")
 
     # impute the flow values according to some scheme
-    G = imputation_scheme(G, nearest_neighors)
+    G = imputation_scheme(G, nearest_neighbors)
 
-    # TODO: we probably need to save G as a graphml file here again if the imputation happens before the visualisation
+    # add new edge attributes to G
+    nx.set_edge_attributes(G, False, 'prior_flow')
+# TODO: turn the 'detectors' list into a global var that is None at start of the file and gets filled here
+# according to line 213
+#TODO: add imputed flow values to the corresponding edges, similar to how its done in visualise_map.py
+    flow_dict = G.nodes.data('flow')
+    prior_flow_dict = G.nodes.data('prior_flow')
+    for node in G.nodes:
+#TODO: do i need to consider the key value?
+        for u, v, ddict in G.edges(node, data=True):
+            # if end node of an edge has had no prior flow, it went through imputation -> add flow of v to that edge
+            ddict['prior_flow'] = prior_flow_dict[v]
+            if not prior_flow_dict[v]:
+                # G[u][v]['flow'] = flow_dict[v]
+                ddict['flow'] = flow_dict[v]
+
+# TODO: we probably need to save G as a graphml file here again if the imputation happens before the visualisation
     # but i think its visualise -> impute, so the save_graphfile_directional function from visualise_network.py
     # should be moved here, because that function creates a bunch of shp files that we need in add_layer.py
     save_graph_shapefile_directional(G, filepath=networkDataRoot)
@@ -284,3 +434,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
