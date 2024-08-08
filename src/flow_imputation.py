@@ -19,6 +19,11 @@ from scipy.spatial import KDTree
 from networkx import MultiDiGraph
 from queue import SimpleQueue
 from visualise_network import save_graph_shapefile_directional
+from sklearn.metrics.pairwise import haversine_distances
+from math import radians
+from multiprocessing import cpu_count
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from multiprocessing import Pool, cpu_count
 
 
 networkDataRoot = os.path.join(ROOT_DIR, "data/network")
@@ -219,7 +224,7 @@ def k_nearest_detectors(G:MultiDiGraph, immediate_neighbors: dict, k: int = 5) -
 
     for node, current_neighbors in immediate_neighbors.items():
     # skip node if it is a detector with a prior flow value
-        if n in detectors:
+        if node in detectors:
             continue
         q = SimpleQueue()
         _ = [q.put_nowait(item) for item in current_neighbors]
@@ -327,41 +332,119 @@ def imputation_scheme(G: MultiDiGraph,nearest_neighbors: dict()) -> MultiDiGraph
 
         if not node_neighbors:
             continue
-        post = [n for n in node_neighbors if n[1] == n[2]]
-        check = (len(pre) > 1, len(post) > 1)
+        
+        flows_distances = np.array(
+            [(all_flows[neighbor_id], total_distance) for neighbor_id, total_distance in node_neighbors])
+        flows, distances = flows_distances[:, 0], flows_distances[:, 1]
+        weights = np.array([factor / (total_distance if total_distance > 0 else 1) for total_distance in distances])
+        imputed_flow = np.average(flows, weights=weights)
 
-        if check == (False, False):
-            # only one predecessor and successor
-            # if we have only 1 predecessor and only 1 neighbor where the immediate distance is equal to the
-            # total distance, we have a 'line' of nodes where we can probably just use the same flow value for all nodes on that line
-            # print("check")
-            pre = all_flows[pre[0]] if pre else all_flows[node_neighbors[0][0]]
-            imputed_flow = (pre + all_flows[node_neighbors[0][0]]) / 2
-        #TODO: do we need a case distinction for this or can we just replace this with an else
-        elif check == (False, True) or check == (True, False) or check == (True, True):
-            # (False, False) means multiple predecessors and successors -> we want to probably use all nearest_neighbors
-            flows_distances = np.array(
-                [(all_flows[neighbor_id], total_distance) for neighbor_id, _, total_distance in node_neighbors])
-            # if len(flows_distances.shape) != 2:
-            #     print("check")
-            # try:
-            flows, distances = flows_distances[:, 0], flows_distances[:, 1]
-            # except:
-            #     print("check")
-            # maybe use 100/total_distance instead of 1/total_distance
-            # try:
-            #     for td in distances:
-            #         if td == 0 or td == 0.0:
-            #             print("0 division?")
-            weights = np.array([factor / (total_distance if total_distance > 0 else 1) for total_distance in distances])
-            # except:
-            #     print("Division by 0?")
-            # https://stackoverflow.com/questions/20054243/np-mean-vs-np-average-in-python-numpy
-            imputed_flow = np.average(flows, weights=weights)
+#        post = [n for n in node_neighbors if n[1] == n[2]]
+#        check = (len(pre) > 1, len(post) > 1)
+#
+#        if check == (False, False):
+#            # only one predecessor and successor
+#            # if we have only 1 predecessor and only 1 neighbor where the immediate distance is equal to the
+#            # total distance, we have a 'line' of nodes where we can probably just use the same flow value for all nodes on that line
+#            # print("check")
+#            pre = all_flows[pre[0]] if pre else all_flows[node_neighbors[0][0]]
+#            imputed_flow = (pre + all_flows[node_neighbors[0][0]]) / 2
+#        #TODO: do we need a case distinction for this or can we just replace this with an else
+#        elif check == (False, True) or check == (True, False) or check == (True, True):
+#            # (False, False) means multiple predecessors and successors -> we want to probably use all nearest_neighbors
+#            flows_distances = np.array(
+#                [(all_flows[neighbor_id], total_distance) for neighbor_id, _, total_distance in node_neighbors])
+#            # if len(flows_distances.shape) != 2:
+#            #     print("check")
+#            # try:
+#            flows, distances = flows_distances[:, 0], flows_distances[:, 1]
+#            # except:
+#            #     print("check")
+#            # maybe use 100/total_distance instead of 1/total_distance
+#            # try:
+#            #     for td in distances:
+#            #         if td == 0 or td == 0.0:
+#            #             print("0 division?")
+#            weights = np.array([factor / (total_distance if total_distance > 0 else 1) for total_distance in distances])
+#            # except:
+#            #     print("Division by 0?")
+#            # https://stackoverflow.com/questions/20054243/np-mean-vs-np-average-in-python-numpy
+#            imputed_flow = np.average(flows, weights=weights)
 
         G_write.nodes[node]['flow'] = imputed_flow
  
     return G_write
+
+
+def distance_between_nodes(G: MultiDiGraph, start: int, ends: [int]):
+    # we need [lat, lon] -> equivalent to [y, x]
+    start_coords = [float(G.nodes[start]['y']), float(G.nodes[start]['x'])]
+    end_coords = [[float(G.nodes[end]['y']), float(G.nodes[end]['x'])] for end in ends]
+
+    start_coords_radians = [radians(coord) for coord in start_coords]
+    end_coords_radians = [[radians(coord) for coord in coords] for coords in end_coords]
+
+    result = haversine_distances([start_coords_radians], end_coords_radians)
+    result_scaled = result * 6371000/1000  # this gets us the result in kilometers
+
+    distances = list(zip(ends, result_scaled.tolist()[0]))
+
+    return sorted(distances, key=lambda x: x[-1])
+
+
+def compute_nearest_neighbors(args): #node, current_neighbors, G, detectors, k):
+    node, current_neighbors, G, detectors, k = args
+    if node in detectors:
+        return None, None
+
+    distances = distance_between_nodes(G, node, detectors)
+    k_sq_distances = distances[:k * 2]
+    nearest_detectors = []
+
+    for detector, _ in k_sq_distances:
+        try:
+            dist = nx.astar_path_length(G, node, detector, weight='length')
+        except:
+            continue
+        nearest_detectors.append((detector, dist))
+
+    nearest_neighbors = sorted(nearest_detectors, key=lambda x: x[-1])[:k]
+    return node, sorted(nearest_neighbors, key=lambda x: x[-1])
+
+
+def parallelize_neighbors_computation(G, k, detectors, immediate_neighbors):
+    knd = {}
+    print("start neighbor detectors computation timer using multiprocessing.Pool")
+    start = time.time_ns()
+
+#    with ThreadPoolExecutor(max_workers=cpu_count()) as executor:
+#        futures = {executor.submit(compute_nearest_neighbors, node, current_neighbors, G, detectors, k): node for
+#                   node, current_neighbors in immediate_neighbors.items()}
+#        for future in as_completed(futures):
+#            node, nearest_neighbors = future.result()
+#            if node is not None:
+#                knd[node] = nearest_neighbors
+
+    num_processes = cpu_count()
+    print(f"number of processes used: {num_processes}")
+    pool = Pool(processes=num_processes)
+    
+    args_list = [(node, current_neighbors, G, detectors, k) for node, current_neighbors in immediate_neighbors.items()]
+   
+    print(f"Time to set up the args_list: {(time.time_ns() - start) / 1e9}")
+
+    results = pool.map(compute_nearest_neighbors, args_list)
+    pool.close()
+    pool.join()
+    
+    for node, nearest_neighbors in results:
+        if node is not None:
+            knd[node] = nearest_neighbors
+
+    end = time.time_ns()
+    print("{}s to run parallelize_neighbors_computation with k = {} for {} nodes in G".format((end - start) / 1e9, k,
+                                                                                   len(immediate_neighbors)))
+    return knd
 
 
 def impute():
@@ -379,29 +462,38 @@ def impute():
 
     # dict of node: (neighbor, distance) pairs
     immediate_neighbors = find_immediate_neighbors(G)
+
+    detector_nodes = []
+    for n, ddict in G.nodes(data=True):
+        if ddict['prior_flow'] == True:  # is the 'True' value in 'prior_flow' saved as a string??
+            detector_nodes.append(
+                n)  # TODO: atm, this discards detectors that don't work aka measure 0 flow -> maybe we want them anyway?
+
 # TODO: k = min(k, num_detectors)
     k = 5
 # TODO: typo
 #    nearest_neighbors = k_nearest_neighbors(G, immediate_neighbors, k)
 #    nearest_neighbors = k_nearest_detectors_astar(G, k)
-    nearest_neighbors = k_nearest_detectors(G, immediate_neighbors, k)
-    # for k in range(1,30):
-    #     nearest_neighbors = k_nearest_neighbors(G, immediate_neighbors, k)
+#    nearest_neighbors = k_nearest_detectors(G, immediate_neighbors, k)
+    nearest_neighbors_parallel = parallelize_neighbors_computation(G, k, detector_nodes, immediate_neighbors)
+#    nearest_neighbors_parallel = dict(sorted(nearest_neighbors_parallel.items()))
+#    # for k in range(1,30):
+#    #     nearest_neighbors = k_nearest_neighbors(G, immediate_neighbors, k)
 
-    detector_nodes = []
-    for n, ddict in G.nodes(data=True):
-        if ddict['prior_flow'] == True: # is the 'True' value in 'prior_flow' saved as a string??
-            detector_nodes.append(n)  # TODO: atm, this discards detectors that don't work aka measure 0 flow -> maybe we want them anyway?
+#    detector_nodes = []
+#    for n, ddict in G.nodes(data=True):
+#        if ddict['prior_flow'] == True: # is the 'True' value in 'prior_flow' saved as a string??
+#            detector_nodes.append(n)  # TODO: atm, this discards detectors that don't work aka measure 0 flow -> maybe we want them anyway?
 #    print(detector_nodes)
-    for node, neighbors in nearest_neighbors.items():
+    for node, neighbors in nearest_neighbors_parallel.items():
         if node in detector_nodes:
             print(f"node {node} is in detector_nodes")
-        for neighbor in neighbors:
-            if neighbor not in detector_nodes:
-                print(f"assumed detector neighbor {neighbor} is not in detector_nodes")
+        for neighbor_id, _ in neighbors:
+            if neighbor_id not in detector_nodes:
+                print(f"assumed detector neighbor {neighbor_id} is not in detector_nodes")
 
     # impute the flow values according to some scheme
-    G = imputation_scheme(G, nearest_neighbors)
+    G = imputation_scheme(G, nearest_neighbors_parallel)
 
     # add new edge attributes to G
     nx.set_edge_attributes(G, False, 'prior_flow')
