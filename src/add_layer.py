@@ -19,12 +19,15 @@ edgesData = ROOT_DIR + "/data/network/edges.shp"
 nodesData = ROOT_DIR + "/data/network/detector_nodes.gpkg"
 mergedDataRoot = ROOT_DIR + "/data/merged_data/"
 projectDataRoot = ROOT_DIR + "/data/project_data/"
-trafficRanges = [[(0.0, 1.0), 'No Data', QtGui.QColor('#afafaf'), 0.26],
-                 [(1.1, 100.0), 'Very Low Traffic', QtGui.QColor('#008000'), 0.66],
-                 [(100.1, 200.0), 'Low Traffic', QtGui.QColor('#00a500'), 0.66],
-                 [(200.1, 300.0), 'Normal Traffic', QtGui.QColor('#f5ff09'), 0.66],
-                 [(300.1, 400.0), 'Busy Traffic', QtGui.QColor('#ffa634'), 0.66],
-                 [(400.1, 1000.0), 'Very Busy Traffic', QtGui.QColor('#ff2712'), 0.66]]
+# last entry in each list was 0.66 except for the very first which was 3
+# was ..., afafaf, 0.26
+initial_width = 1
+trafficRanges = [[(0.0, 0.9), 'No Data', QtGui.QColor('#ff70a0'), initial_width],
+                 [(1.0, 100.0), 'Very Low Traffic', QtGui.QColor('#008000'), initial_width * 1.25],
+                 [(100.1, 200.0), 'Low Traffic', QtGui.QColor('#00a500'), initial_width * 1.5],
+                 [(200.1, 300.0), 'Normal Traffic', QtGui.QColor('#f5ff09'), initial_width * 1.75],
+                 [(300.1, 400.0), 'Busy Traffic', QtGui.QColor('#ffa634'), initial_width * 2.0],
+                 [(400.1, 1000.0), 'Very Busy Traffic', QtGui.QColor('#ff2712'), initial_width * 2.25]]
 
 prefixPath = r'/usr'  # TODO: change prefix path to your QGIS root directory
 QgsApplication.setPrefixPath(prefixPath, True)
@@ -105,67 +108,70 @@ def mapAndPoint():
     options = '?delimiter={}&xField=lon&yField=lat&crs=epsg:4326'.format(delim)
     uri = "file:///{}{}".format(merged_points_data_csv, options)
 
-    try:
-        layer = QgsVectorLayer(edgesData, "testlayer_shp", "ogr")
-        gpkg_edgelayer = QgsVectorLayer(nodesData + "|layername=edges", "OSMnx edges", "ogr")
-        gpkg_nodelayer = QgsVectorLayer(nodesData + "|layername=nodes", "OSMnx nodes", "ogr")
-        csvlayer = QgsVectorLayer(uri, "Points", "delimitedtext")
-    except Exception as e:
-        logging.debug(e)
+#    try:
+#    layer = QgsVectorLayer(edgesData, "testlayer_shp", "ogr")
+    gpkg_edgelayer = QgsVectorLayer(nodesData + "|layername=edges", "OSMnx edges", "ogr")
+#    gpkg_nodelayer = QgsVectorLayer(nodesData + "|layername=nodes", "OSMnx nodes", "ogr")
+    csvlayer = QgsVectorLayer(uri, "Points", "delimitedtext")
+#    except Exception as e:
+#        logging.debug(e)
 
-    add_vector_layer(layer)
+#    add_vector_layer(layer)
     add_vector_layer(gpkg_edgelayer)
-    add_vector_layer(gpkg_nodelayer)
+#    add_vector_layer(gpkg_nodelayer)
     add_vector_layer(csvlayer)
 
-    shpField = 'fid'
-    csvField = 'fid'
-    joinObject = QgsVectorLayerJoinInfo()
-    joinObject.setJoinFieldName(csvField)
-    joinObject.setTargetFieldName(shpField)
-    joinObject.setJoinLayerId(gpkg_nodelayer.id())
-    joinObject.setUsingMemoryCache(True)
-    joinObject.setJoinLayer(gpkg_nodelayer)
-    gpkg_edgelayer.addJoin(joinObject)
+#    shpField = 'fid'
+#    csvField = 'fid'
+#    joinObject = QgsVectorLayerJoinInfo()
+#    joinObject.setJoinFieldName(csvField)
+#    joinObject.setTargetFieldName(shpField)
+#    joinObject.setJoinLayerId(gpkg_nodelayer.id())
+#    joinObject.setUsingMemoryCache(True)
+#    joinObject.setJoinLayer(gpkg_nodelayer)
+#    gpkg_edgelayer.addJoin(joinObject)
 
     # set the size of the points from gpkg_nodelayer to be data driven using the "size" attribute
     # create a new symbol for rendering the points of the node layer
-    size_symbol = QgsSymbol.defaultSymbol(gpkg_nodelayer.geometryType())
+##    size_symbol = QgsSymbol.defaultSymbol(gpkg_nodelayer.geometryType())
     # set a data-defined override for the size, based on the 'size' attribute
-    size_symbol.setDataDefinedSize(QgsProperty.fromField("size"))
+##    size_symbol.setDataDefinedSize(QgsProperty.fromField("size"))
     # set the renderer to the layer
-    gpkg_nodelayer.setRenderer(QgsSingleSymbolRenderer(size_symbol))
+##    gpkg_nodelayer.setRenderer(QgsSingleSymbolRenderer(size_symbol))
     # refresh the layer to apply changes -> not necessary I think since we dont have a QGIS instance running
     # gpkg_nodelayer.triggerRepaint()
 
     # color detector locations stored in csvlayer according to traffic flow
     target_field = 'flow'
     range_list = []
-    range_listforSHP = []
+#    range_listforSHP = []
     geom_type = csvlayer.geometryType()
-    geom_typeforSHP = gpkg_edgelayer.geometryType()
+#    geom_typeforSHP = gpkg_edgelayer.geometryType()
 
     for traffic_range in trafficRanges:
         color_range = add_color(*traffic_range, geom_type)
         range_list.append(color_range)
-        color_rangeforSHP = add_color(*traffic_range, geom_typeforSHP)
-        range_listforSHP.append(color_rangeforSHP)
+ #       color_rangeforSHP = add_color(*traffic_range, geom_typeforSHP)
+ #       range_listforSHP.append(color_rangeforSHP)
 
     # render the colored csvlayer
-    renderer = QgsGraduatedSymbolRenderer('', range_list)
-    classification_method = QgsApplication.classificationMethodRegistry().method("EqualInterval")
-    renderer.setClassificationMethod(classification_method)
-    renderer.setClassAttribute(target_field)
-    csvlayer.setRenderer(renderer)
-    print("Classification of detectors done.", csvlayer)
-    project.setCrs(QgsCoordinateReferenceSystem('EPSG:3857'), True)
+##    renderer = QgsGraduatedSymbolRenderer('', range_list)
+##    classification_method = QgsApplication.classificationMethodRegistry().method("EqualInterval")
+##    renderer.setClassificationMethod(classification_method)
+##    renderer.setClassAttribute(target_field)
+##    csvlayer.setRenderer(renderer)
+##    print("Classification of detectors done.", csvlayer)
+##    project.setCrs(QgsCoordinateReferenceSystem('EPSG:3857'), True)
 
     # color detector edges using rule based symbols
     linewidth = 1.2
-    range_list = [[('NULL', 'NULL'), "No data", QtGui.QColor('#D3D3D3')]] + trafficRanges
+    range_list = [[('NULL', 'NULL'), "No data", QtGui.QColor('#D3D3D3'), 0.66]] + trafficRanges
     symbol = QgsSymbol.defaultSymbol(gpkg_edgelayer.geometryType())
     edge_renderer = QgsRuleBasedRenderer(symbol)
     root_rule = edge_renderer.rootRule()
+    
+    opacity_property = QgsProperty.fromExpression('if("prior_flow" = true, 1, 0.5)')
+
     for color_range in range_list:
         rule = root_rule.children()[0].clone()
         rule.setLabel(color_range[1])
@@ -175,14 +181,43 @@ def mapAndPoint():
             else '"flow" IS NULL'
         rule.setFilterExpression(expression)
         rule.symbol().setColor(color_range[2])
-        if color_range[1] != "No data":
-            rule.symbol().symbolLayer(0).setWidth(linewidth)
-        else:
-            rule.symbol().symbolLayer(0).setWidth(linewidth/2)
+#        if color_range[1] != "No data":
+#            rule.symbol().symbolLayer(0).setWidth(linewidth)
+#        else:
+#            rule.symbol().symbolLayer(0).setWidth(linewidth/2)
+        rule.symbol().symbolLayer(0).setWidth(color_range[3])
+#        for i in range(rule.symbol().symbolLayerCount()):
+#            layer = rule.symbol().symbolLayer(i)
+#            layer.setDataDefinedProperty(QgsSymbolLayer.PropertyOpacity, opacity_property)
         # rule.setMinimumScale(0.01)
         # rule.setMaximumScale(1.0)
         root_rule.appendChild(rule)
-    root_rule.removeChildAt(0)
+
+#    rule = root_rule.children()[0].clone()
+#    rule.setLabel("Imputed Flow")
+#    expression = '"flow" > 0.0 AND "prior_flow" = true'
+#    rule.setFilterExpression(expression)
+#    rule.symbol().setColor(QtGui.QColor('#bf00ff'))
+#    root_rule.appendChild(rule)
+
+    # Rule for imputed flow
+#    rule = root_rule.children()[0].clone()
+#    rule.setLabel("Detected Flow")
+#    expression = '"prior_flow" = "True"'
+#    rule.setFilterExpression(expression)
+#    rule.symbol().setColor(QColor('#bf00ff'))
+#    rule.symbol().setOpacity(1.0)  # Full opacity for prior_flow = true
+#    root_rule.appendChild(rule)
+
+#    rule = root_rule.children()[0].clone()
+#    rule.setLabel("Imputed Flow")
+#    expression = '"prior_flow" = "False"'
+#    rule.setFilterExpression(expression)
+#    rule.symbol().setColor(QColor('#bf00ff'))
+#    rule.symbol().setOpacity(0.5)  # Reduced opacity for prior_flow = false
+#    root_rule.appendChild(rule)
+
+    root_rule.removeChildAt(0)  
 
     gpkg_edgelayer.setRenderer(edge_renderer)
     gpkg_edgelayer.triggerRepaint()
@@ -232,7 +267,8 @@ def layer():
 
     # https://stackoverflow.com/questions/53513/how-do-i-check-if-a-list-is-emptyhttps://stackoverflow.com/questions/53513/how-do-i-check-if-a-list-is-empty
     if os.listdir(projectDataRoot):
-        delete_files_in_directory(projectDataRoot)
+        pass
+#        delete_files_in_directory(projectDataRoot)
     else:
         print("No files found in the directory.")
     mapAndPoint()
