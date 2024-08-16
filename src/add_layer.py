@@ -23,11 +23,11 @@ projectDataRoot = ROOT_DIR + "/data/project_data/"
 # was ..., afafaf, 0.26
 initial_width = 1
 trafficRanges = [[(0.0, 0.9), 'No Data', QtGui.QColor('#ff70a0'), initial_width],
-                 [(1.0, 100.0), 'Very Low Traffic', QtGui.QColor('#008000'), initial_width * 1.25],
-                 [(100.1, 200.0), 'Low Traffic', QtGui.QColor('#00a500'), initial_width * 1.5],
-                 [(200.1, 300.0), 'Normal Traffic', QtGui.QColor('#f5ff09'), initial_width * 1.75],
-                 [(300.1, 400.0), 'Busy Traffic', QtGui.QColor('#ffa634'), initial_width * 2.0],
-                 [(400.1, 1000.0), 'Very Busy Traffic', QtGui.QColor('#ff2712'), initial_width * 2.25]]
+                 [(1.0, 100.0), 'Very Low Traffic', QtGui.QColor('#008000'), initial_width * 1.0],
+                 [(100.1, 200.0), 'Low Traffic', QtGui.QColor('#00a500'), initial_width * 1.75],
+                 [(200.1, 300.0), 'Normal Traffic', QtGui.QColor('#f5ff09'), initial_width * 2.5],
+                 [(300.1, 400.0), 'Busy Traffic', QtGui.QColor('#ffa634'), initial_width * 3.25],
+                 [(400.1, 1000.0), 'Very Busy Traffic', QtGui.QColor('#ff2712'), initial_width * 4.0]]
 
 prefixPath = r'/usr'  # TODO: change prefix path to your QGIS root directory
 QgsApplication.setPrefixPath(prefixPath, True)
@@ -119,7 +119,7 @@ def mapAndPoint():
 #    add_vector_layer(layer)
     add_vector_layer(gpkg_edgelayer)
 #    add_vector_layer(gpkg_nodelayer)
-    add_vector_layer(csvlayer)
+#    add_vector_layer(csvlayer)
 
 #    shpField = 'fid'
 #    csvField = 'fid'
@@ -142,15 +142,15 @@ def mapAndPoint():
     # gpkg_nodelayer.triggerRepaint()
 
     # color detector locations stored in csvlayer according to traffic flow
-    target_field = 'flow'
-    range_list = []
+#    target_field = 'flow'
+#    range_list = []
 #    range_listforSHP = []
-    geom_type = csvlayer.geometryType()
+#    geom_type = csvlayer.geometryType()
 #    geom_typeforSHP = gpkg_edgelayer.geometryType()
 
-    for traffic_range in trafficRanges:
-        color_range = add_color(*traffic_range, geom_type)
-        range_list.append(color_range)
+#    for traffic_range in trafficRanges:
+#        color_range = add_color(*traffic_range, geom_type)
+#        range_list.append(color_range)
  #       color_rangeforSHP = add_color(*traffic_range, geom_typeforSHP)
  #       range_listforSHP.append(color_rangeforSHP)
 
@@ -161,17 +161,17 @@ def mapAndPoint():
 ##    renderer.setClassAttribute(target_field)
 ##    csvlayer.setRenderer(renderer)
 ##    print("Classification of detectors done.", csvlayer)
-##    project.setCrs(QgsCoordinateReferenceSystem('EPSG:3857'), True)
+    project.setCrs(QgsCoordinateReferenceSystem('EPSG:3857'), True)
 
     # color detector edges using rule based symbols
     linewidth = 1.2
     range_list = [[('NULL', 'NULL'), "No data", QtGui.QColor('#D3D3D3'), 0.66]] + trafficRanges
     symbol = QgsSymbol.defaultSymbol(gpkg_edgelayer.geometryType())
+    opacity_property = QgsProperty.fromExpression('if("prior_flow" = true, 100, 50)')
+    symbol.setDataDefinedProperty(QgsSymbol.Property.Opacity, opacity_property)
     edge_renderer = QgsRuleBasedRenderer(symbol)
     root_rule = edge_renderer.rootRule()
     
-    opacity_property = QgsProperty.fromExpression('if("prior_flow" = true, 1, 0.5)')
-
     for color_range in range_list:
         rule = root_rule.children()[0].clone()
         rule.setLabel(color_range[1])
