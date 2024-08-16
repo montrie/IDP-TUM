@@ -2,13 +2,14 @@ import os
 import glob
 import subprocess
 import time
-
+import pickle
+import logging
 import fiona  # this import needs to happen before osmnx
+
 import networkx as nx
 import osmnx as ox
 import pandas as pd
 import numpy as np
-import logging
 
 from networkx import MultiDiGraph
 from geopandas import GeoDataFrame
@@ -66,7 +67,7 @@ def save_graph_shapefile_directional(graph: MultiDiGraph, filepath=None, encodin
     gdf_edges["fid"] = np.arange(0, gdf_edges.shape[0], dtype='int')
     # some column names exceed the 10 character limit, so let's rename them
     gdf_nodes.rename(columns={'street_count': 'street_cnt'}, inplace=True)
-    # save the nodes and edges as separate ESRI shapefiles 
+    # save the nodes and edges as separate ESRI shapefiles
     gdf_nodes.to_file(filepath_nodes, encoding=encoding, driver='ESRI Shapefile')
     gdf_edges.to_file(filepath_edges, encoding=encoding, driver='ESRI Shapefile')
 
@@ -79,7 +80,7 @@ def get_base_graphml() -> MultiDiGraph:
     """
     # Create/load base map
     if not os.path.exists(path_map_munich):
-        graph = ox.graph_from_place("München, Bayern, Deutschland", network_type="drive", simplify=False)
+        graph = ox.graph_from_place("München, Bayern, Deutschland", network_type="drive", simplify=True)
         ox.save_graphml(graph, path_map_munich)
     else:
         graph = ox.load_graphml(path_map_munich)
@@ -99,7 +100,7 @@ def get_detectors() -> (GeoDataFrame, [Point]):
     
     # load detectors from merged_data
     latest_merged_data_csv = max(glob.glob(mergedDataRoot + "*.csv"), key=os.path.getctime)
-    detector_df = pd.read_csv(latest_merged_data_csv)
+    detector_df = pd.read_csv(latest_merged_data_csv)  # , index_col=0
 
     # create GeoDataFrame
     geometry = [Point(lon, lat) for lon, lat in zip(detector_df['lon'], detector_df['lat'])]
@@ -197,6 +198,7 @@ def connect_detector_nodes(G: MultiDiGraph, detector_nodes: [(float, float)], de
         new_geoms.append(line)  # new_geoms[i] now contains an edge with detector i and i+1 as start and end point
 
         # create train of edges by calculating the length of the new split up part
+# TODO: pull i == 0 case before loop and i == count - 1 case outside of loop, reduce loop to range(1, count-1)
         for i in range(count):
             # https://stackoverflow.com/questions/72523683/#:~:text=Then%20you%20could%20e.g.%20define%20the%20new%20edge%20like%20this
             if i == 0:
@@ -237,16 +239,27 @@ def plot():
     # LINESTRING(lon lat) instead of LINESTRING(lon lat,lon lat) -> fix those entries:
     def _fix_linestring(ls: str):
         ls_split = ls.split(',')
+        if ls == "LINESTRING()":
+            print(f"WHY IS IT JUST {ls_split}")
+            return ls
         # if ls contains a valid linestring, return ls
         if len(ls_split) == 2:
             return ls
         # else ls is of form LINESTRING(lon lat)
-        else:
-            lon, lat = ls[11:-1].split(' ')
+        if len(ls_split) == 1:
+            try:
+                print(ls)
+                lon, lat = ls[11:-1].split(' ')
+            except:
+                print("IST DER LEER???")
+                print(ls)
+                raise Exception("shits fucked")
             return ls[:-1] + ",{} {})".format(lon, lat)
+        return ls
+
 
     # some matched detector locations are broken -> fix them and add them back to the 'mgeom' column
-    # df_matched["mgeom"] = df_matched["mgeom"].apply(_fix_linestring)
+#    df_matched["mgeom"] = df_matched["mgeom"].apply(_fix_linestring)
 
     # get id and mgeom columns from matched detector locations
     matched_detector_locations = df_matched[["id", "mgeom"]]
@@ -267,17 +280,23 @@ def plot():
         if id not in xml_ids:
             missing_ids.append(id)
             continue
-        try:
-            flow = flows.loc[id, 'flow']
-        except Exception as e:
-            logging.error(f"Tried accessing id {id} in {plot.__name__}, but could not find it.\n{e}")
+        flow = flows.loc[id, 'flow']
+        if flow < 0:
+            flow = 0
 
         lon_lat = node.split(',')[0][11:].split(' ')
         flow_list.append(flow)
-        nodes_list.append((lon_lat[1], lon_lat[0]))
+        lon, lat = lon_lat[0], lon_lat[1]
+        # sometimes,  LINESTRING(lon lat) instead of LINESTRING(lon lat,lon lat) -> remove the paranthesis at tge end of lat
+        if lat[-1] == ')':
+            print(f"lat: {lat}, node: {node}")
+            lat = lat[:-1]
+#        nodes_list.append((lon_lat[1], lon_lat[0]))
+        nodes_list.append((lat, lon))
         detector_ids.append(id)
         # add x, y, flow information to new detector nodes in an osmnx network
-        nodes_map.add_node(id, x=lon_lat[0], y=lon_lat[1], flow=flow)
+#        nodes_map.add_node(id, x=lon_lat[0], y=lon_lat[1], flow=flow)
+        nodes_map.add_node(id, x=lon, y=lat, flow=flow)
 
     # create a node dict that sets the size of a node depending on its flow value -> effectively hide non-detector nodes
     nodes_sizes_dict = {n[0]: 0 if n[1] == "NULL" else node_size for n in nodes_map.nodes(data='flow', default="NULL")}
@@ -306,7 +325,10 @@ def plot():
     print("{}s to execute connect_detector_nodes with {} nodes".format((end-start)/1e9, len(nodes_list)))
 
     # save the graph after connecting the detector nodes to the map
-    ox.io.save_graph_geopackage(nodes_map, networkDataRoot + "detector_nodes.gpkg")
+    ox.io.save_graph_geopackage(nodes_map, networkDataRoot + "detector_nodes_map.gpkg")
+    with open(os.path.join(networkDataRoot, "simplify_nodes_map.gpickle"), 'wb') as f:
+        pickle.dump(nodes_map, f)
+#    nx.write_gpickle(nodes_map, networkDataRoot + "simplify_nodes_map.gpickle")
 
 
 def main():
