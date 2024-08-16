@@ -515,6 +515,7 @@ def impute():
     # but i think its visualise -> impute, so the save_graphfile_directional function from visualise_network.py
     # should be moved here, because that function creates a bunch of shp files that we need in add_layer.py
     save_graph_shapefile_directional(G, filepath=networkDataRoot)
+    ox.io.save_graph_geopackage(G, os.path.join(networkDataRoot, "detector_nodes.gpkg"))
     with open(os.path.join(networkDataRoot, "imputed_nodes_map.gpickle"), 'wb') as f:
         # G = pickle.load(f)
         pickle.dump(G, f)
