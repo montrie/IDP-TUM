@@ -117,6 +117,9 @@ def mapAndPoint():
     # create data-driven opacity property
     symbol = QgsSymbol.defaultSymbol(gpkg_edgelayer.geometryType())
     opacity_property = QgsProperty.fromExpression('if("prior_flow" = true, 100, 50)')
+    # TODO: the data-driven opacity property works as expected when opening the visualization in QGIS
+    # BUT: the website that contains the same visualization suddenly does not retain the opacity property
+    # Instead, the opacity of all edges is simply 100
     symbol.setDataDefinedProperty(QgsSymbol.Property.Opacity, opacity_property)
 
     # create a rule based renderer using the created symbol
@@ -152,6 +155,10 @@ def mapAndPoint():
     #canvas = qgis.utils.iface.mapCanvas()
     #canvas.setExtent(temp.extent())
     #canvas.refresh()
+    canvas = QgsMapCanvas()
+    canvas.setCurrentLayer(gpkg_edgelayer)
+    canvas.setExtent(gpkg_edgelayer.extent())
+    canvas.refresh()
 
     # save the created QGIS project
     project.write(filename=os.path.join(projectDataRoot, "mapAndPoint.qgs"))
