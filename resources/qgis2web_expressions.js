@@ -763,3 +763,95 @@ function fnc__specialcol_(values, context) {
 function fnc_project_color(values, context) {
     return false;
 };
+
+
+
+function exp_OSMnxedges_1rule0_eval_expression(context) {
+    // flow IS NULL
+
+    var feature = context.feature;
+    
+    if (feature.properties) {
+        return (feature.get('flow')  === null);
+    } else {
+        return (feature.get('flow')  === null);
+    }
+}
+
+
+function exp_OSMnxedges_1rule1_eval_expression(context) {
+    // flow >= 0 AND flow <= 0.9
+
+    var feature = context.feature;
+    
+    if (feature.properties) {
+        return ((feature.get('flow')  >= 0.0) && (feature.get('flow')  <= 0.9));
+    } else {
+        return ((feature.get('flow')  >= 0.0) && (feature.get('flow')  <= 0.9));
+    }
+}
+
+
+function exp_OSMnxedges_1rule2_eval_expression(context) {
+    // flow >= 1 AND flow <= 100
+
+    var feature = context.feature;
+    
+    if (feature.properties) {
+        return ((feature.get('flow')  >= 1.0) && (feature.get('flow')  <= 100.0));
+    } else {
+        return ((feature.get('flow')  >= 1.0) && (feature.get('flow')  <= 100.0));
+    }
+}
+
+
+function exp_OSMnxedges_1rule3_eval_expression(context) {
+    // flow >= 100.1 AND flow <= 200
+
+    var feature = context.feature;
+    
+    if (feature.properties) {
+        return ((feature.get('flow')  >= 100.1) && (feature.get('flow')  <= 200.0));
+    } else {
+        return ((feature.get('flow')  >= 100.1) && (feature.get('flow')  <= 200.0));
+    }
+}
+
+
+function exp_OSMnxedges_1rule4_eval_expression(context) {
+    // flow >= 200.1 AND flow <= 300
+
+    var feature = context.feature;
+    
+    if (feature.properties) {
+        return ((feature.get('flow')  >= 200.1) && (feature.get('flow')  <= 300.0));
+    } else {
+        return ((feature.get('flow')  >= 200.1) && (feature.get('flow')  <= 300.0));
+    }
+}
+
+
+function exp_OSMnxedges_1rule5_eval_expression(context) {
+    // flow >= 300.1 AND flow <= 400
+
+    var feature = context.feature;
+    
+    if (feature.properties) {
+        return ((feature.get('flow')  >= 300.1) && (feature.get('flow')  <= 400.0));
+    } else {
+        return ((feature.get('flow')  >= 300.1) && (feature.get('flow')  <= 400.0));
+    }
+}
+
+
+function exp_OSMnxedges_1rule6_eval_expression(context) {
+    // flow >= 400.1 AND flow <= 1000
+
+    var feature = context.feature;
+    
+    if (feature.properties) {
+        return ((feature.get('flow')  >= 400.1) && (feature.get('flow')  <= 1000.0));
+    } else {
+        return ((feature.get('flow')  >= 400.1) && (feature.get('flow')  <= 1000.0));
+    }
+}

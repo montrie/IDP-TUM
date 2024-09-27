@@ -1,49 +1,38 @@
-from add_layer import layer
 from datetime import datetime
-from time import sleep
+from add_layer import layer
 from pull_xml_to_csv_mobilithek import xml_to_csv
 from pull_static_mobilithek import static_data
 from compare import output_data, compare_csv_files
-from clear_flow import clear_flow
-from visualise_network import plot
+#from clear_flow import clear_flow
+from flow_imputation import impute
+from connect_detectors import split_and_reconnect
 from website import update_website
 from config import ROOT_DIR
 
-import cProfile
 import logging
-import warnings
-
-LOOP = False
-PROFILE = False  # set to True to include profiling
-INTERVAL = 15  # defines at which multiple of 60 minutes in an hour we want to run task()
-# warnings.simplefilter('error', DeprecationWarning)
 
 
-def task():
-        xml_to_csv()
-        static_data()
-        output_data()
-        compare_csv_files()
-        clear_flow()
-        plot() 
-        layer()
-        update_website()
-
-
-def run(condition: bool):
-    """ For now: Entry point for the processing pipeline. Calls the different processing
-    steps before sleeping for 15 minutes if ``condition`` is ``True``
-
-    :param condition: specifies whether processing pipeline should run indefinitely
+def workflow():
     """
-#    while datetime.now().minute not in range(0, 60, INTERVAL):
-#        # Wait 1 second until we are synced up with the 'every 15 minutes' clock
-#        sleep(60)
-
-    task()
-
-#    if condition:
-#        run(condition)
+    Main workflow that downloads the static and measurement data, 
+    """
+    # download and store the measurement data
+    xml_to_csv() 
+    # download and store the static data
+    static_data()
+    # merge static location data and measurement data into one file
+    output_data()
+    # use hand-labelled detector locations to complement the detector coordinates
+    compare_csv_files()
+#    clear_flow()
+    # splice and reconnect the network edges
+    split_and_reconnect()
+    # impute detector flow values for every network node
+    impute()
+    # create the qgis layer containing the visualization
+    layer()
+    # push files that update the website
+    update_website() 
 
 
 def setup_logging():
@@ -54,32 +43,15 @@ def setup_logging():
                         format="%(name)s %(asctime)s %(levelname)s %(message)s")
 
 
-def profile():
-    # TODO: figure out how to profile the code, maybe we can fix the slow parts
-    pr = cProfile.Profile()
-    pr.enable()
-
-    main()
-
-    pr.disable()
-    pr.print_stats(sort="time")
-    pr.dump_stats(ROOT_DIR + "/profiling/profile.prof")
-
-
 def main():
-    xml_to_csv()
-    static_data()
-    output_data()
-    compare_csv_files()
-    clear_flow()
-    plot()
-    layer()
+    """
+    Entry point for the processing pipeline. Sets up the logging module
+    and executes the workflow
+    """
+    setup_logging()
+    workflow()
+    logging.info("-----END OF WORKFLOW-----")
 
 
 if __name__ == '__main__':
-    setup_logging()
-    if PROFILE:
-        profile()
-    else:
-       # main()
-       run(LOOP)
+       main()

@@ -12,4 +12,6 @@ nohup sh bg_run.sh> errlog.log 2>&1 </dev/null &
 
 # $! contains the process ID of the most recently executed background pipeline: https://unix.stackexchange.com/questions/85021/in-bash-scripting-whats-the-meaning-of
 # pid.txt can later be used to kill the started background process
+# kill -9 `cat ~/IDP-TUM/src/pid.txt`
+#  ps aux | grep `cat ~/IDP-TUM/src/pid.txt` to check whether the process is still running -> there should be 2 lines of output if the process is alive
 echo $! > pid.txt

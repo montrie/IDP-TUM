@@ -1,5 +1,4 @@
 import requests
-from requests_pkcs12 import Pkcs12Adapter
 import pandas as pd
 import os
 import time
@@ -10,16 +9,17 @@ import os
 import sys
 import math
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# rootPath = ROOT_DIR.replace("\\", "/")
-# Root = rootPath + "/xml_data"
-Root = os.path.join(ROOT_DIR, "data", "xml_data")
+from requests_pkcs12 import Pkcs12Adapter
+from config import ROOT_DIR
 
+
+# root directory where the measurement data will be stored
+Root = os.path.join(ROOT_DIR, "data", "xml_data")
 # URL for the DATEX II v2 SOAP endpoint
 soap_url = 'https://mobilithek.info:8443/mobilithek/api/v1.0/subscription/soap/610484276019744768/clientPullService'
 
 # Replace with the actual path to your .p12 certificate file and password
-p12_certificate_path = os.path.join(ROOT_DIR, "certificate", "certificate.p12")  # r""+ROOT_DIR+r"\certificate\certificate.p12"
+p12_certificate_path = os.path.join(ROOT_DIR, "certificate", "certificate.p12")
 p12_certificate_password = 'S7YwrWhJP4Zd'
 
 # Define the SOAP request XML payload with the specified 'SOAPAction'
@@ -52,7 +52,6 @@ def pull_and_save_data(working_directory=os.getcwd()):
 
         # Send the SOAP request
         response = session.post(soap_url, data=soap_request_xml, headers=headers)
-
         if response.status_code == 200:
             # Extract and process the DATEX II data from the response
             mdm = pdx.read_xml(response.text,
@@ -128,7 +127,7 @@ def pull_and_save_data(working_directory=os.getcwd()):
             session.close()
 
         else:
-            print(f"Request failed with status code: {response.status_code}")
+            print(f"Request failed with status code: {response.status_code}\n{response.text}\n{response.request}")
 
     except Exception as e:
         print(f"An error occurred: {str(e)}")

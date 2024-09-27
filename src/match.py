@@ -1,11 +1,11 @@
-from fmm import FastMapMatch, STMATCH, Network, NetworkGraph, UBODTGenAlgorithm, UBODT 
-from fmm import GPSConfig, ResultConfig, STMATCHConfig, FastMapMatchConfig
-from config import RUNS_PER_RELOAD
-
 import sys
 import logging
 
-network_dir = "../data/network"
+from fmm import FastMapMatch, STMATCH, Network, NetworkGraph, UBODTGenAlgorithm, UBODT 
+from fmm import GPSConfig, ResultConfig, STMATCHConfig, FastMapMatchConfig
+from config import ID, GEOM, X, Y, GPS_POINT, MATCHED_OUTPUT
+
+network_dir = "../data/network/"
 
 
 def match(fpoints: str):
@@ -15,10 +15,9 @@ def match(fpoints: str):
     :param fpoints: Path to the csv file containing the detector locations to be matched to the network
     """
     ### Read network data
-    network = Network(network_dir+"/edges.shp","fid","u","v")
-    logging.info("Nodes {} edges {}".format(network.get_node_count(),network.get_edge_count()))
+    network = Network(network_dir+"edges.shp","fid","u","v")
     graph = NetworkGraph(network)
-       
+   
     ### Create STMATCH model
     model = STMATCH(network, graph)
 
@@ -31,19 +30,19 @@ def match(fpoints: str):
 
     ### Define GPS configurations
     gps_config = GPSConfig()
-    gps_config.file = network_dir + "/" + fpoints
-    gps_config.id = 'detid'
-    gps_config.geom = 'geometry'
-    gps_config.x = 'lon'
-    gps_config.y = 'lat'
-    gps_config.gps_point = True
+    gps_config.file = network_dir + fpoints
+    gps_config.id = ID
+    gps_config.geom = GEOM
+    gps_config.x = X
+    gps_config.y = Y
+    gps_config.gps_point = GPS_POINT
     
     ### Define result configurations
     result_config = ResultConfig()
-    result_config.file = network_dir + "/matched.csv"  # + fpoints[:-4] + "matched.csv"  # fpoints[:-4] strips the file ending
+    result_config.file = network_dir + MATCHED_OUTPUT
     result_config.output_config.write_opath = True
     
     ### Run map matching for GPS files
     status = model.match_gps_file(gps_config, result_config, stmatch_config, use_omp=True)
     logging.info(status)
-        
+ 

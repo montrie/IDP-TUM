@@ -1,5 +1,4 @@
 import requests
-from requests_pkcs12 import Pkcs12Adapter
 import pandas as pd
 import os
 import time
@@ -7,15 +6,17 @@ import datetime
 import sys
 import pandas_read_xml as pdx
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# rootPath = ROOT_DIR.replace("\\", "/")
-# Root = rootPath + "/static_data"
+from requests_pkcs12 import Pkcs12Adapter
+from config import ROOT_DIR
+
+
+# root path where the static data will be stored
 Root = os.path.join(ROOT_DIR, "data", "static_data")
 # URL for the DATEX II v2 SOAP endpoint
 soap_url = 'https://mobilithek.info:8443/mobilithek/api/v1.0/subscription/soap/610481569602957312/clientPullService'
 
 # Replace with the actual path to your .p12 certificate file and password
-p12_certificate_path = os.path.join(ROOT_DIR, "certificate", "certificate.p12") # r""+ROOT_DIR+r"\certificate\certificate.p12"
+p12_certificate_path = os.path.join(ROOT_DIR, "certificate", "certificate.p12")
 p12_certificate_password = 'S7YwrWhJP4Zd'
 
 # Define the SOAP request XML payload with the specified 'SOAPAction'
