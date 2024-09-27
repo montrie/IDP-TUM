@@ -18,29 +18,17 @@ def update_website():
     We amend the newest commit with the previous one to reduce clutter in the commit history.
     """
 
+    # files is used to build the git add command which needs to look like this: git add file1 file2 file3
     files = ""
     for file in website_files:
         files += os.path.join(root_layers, file) + " "
 
-    # check if we are on the 'website' branch
-    check_branch = subprocess.Popen(
-        "echo \"$(git rev-parse --abbrev-ref HEAD)\"",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        shell=True,
-        universal_newlines=True
-    )
-    try:
-        out, error = check_branch.communicate()
-        print(out)
-        if out.strip() != "website":
-            raise Exception("We are not on the correct branch to publish the newest changes of the website. Please switch to the branch 'website'.")
-    except Exception as e:
-        logging.exception(e)
-
     # execute the amendment workflow
-    # used 'git commit --amend -C HEAD' before to simply reuse the previous commit message
-    # git commit -m \"Update website\"; git reset --soft HEAD~1; between git add and git commit--amend
+    # create a subprocess that starts an ssh agent that contains the credential for the repository we want to push the update to
+    # it also amends this comment to the most recent one and force pushes that to the 'website' branch
+    # this way we update the website branch without cluttering up the commit messages (-f is necessary because we are rewriting the commit history)
+    # if we dont want to force push, we cannot use the amend option
+    # pushing to the 'website' branch also updates the Github Pages website
     pr = subprocess.Popen(
         f"eval $(ssh-agent); git add {files[:-1]}; git commit --amend -m \"Update website $(date '+%Y-%m-%d %H:%M:%S %Z')\"; git push -f origin @:website",
         stdout=subprocess.PIPE,
@@ -48,13 +36,17 @@ def update_website():
         shell=True,
         universal_newlines=True
     )
+
+    # flag that helps communicating to the log file whether the website update was successfully pushed
     try:
         out, error = pr.communicate()
-#        print(out)
+        success = True
     except Exception as e:
         logging.exception(e)
+        success = False
 
-    logging.info("Website update was pushed successfully.")
+    if success:
+        logging.info("Website update was pushed successfully.")
 
 
 def main():
