@@ -1,2 +1,7 @@
 /venv/
 .idea
+output_data/
+static_data/
+xml_data/
+merged_data/
+compared_data/
