@@ -147,10 +147,7 @@ def mapAndPoint():
     gpkg_edgelayer.setRenderer(edge_renderer)
     gpkg_edgelayer.triggerRepaint()
 
-    # Center QGIS on the rlayer
-    testlayers = project.layerTreeRoot()
-    testlayers.children()[0].zoom()
-    print(testlayers.children()[0])
+    # TODO: How to center QGIS on the OSMnx edges layer? I cant figure it out :)
     #temp = project.mapLayersByName("OSMnx edges")[0]
     #canvas = qgis.utils.iface.mapCanvas()
     #canvas.setExtent(temp.extent())
